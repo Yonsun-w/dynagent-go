@@ -133,9 +133,12 @@ Stores:
 
 ```bash
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt 'Check the weather for my current location and tell me whether I should bring an umbrella'
 CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
+
+Once a real LLM API is configured, run the same demo with `--verbose` to inspect function contracts, tool registration payloads, and routing decisions.
 
 ## 🧷 Framework Demo
 
@@ -146,6 +149,7 @@ The default demo is now a **framework-native weather agent**:
 - `finalize_weather_answer`
 - `route_next_node(...)`
 - `propose_dag(...)`
+- custom node registration + AI routing + sandbox execution + patch merge + structured summary
 
 ## 📎 Notes
 

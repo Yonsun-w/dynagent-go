@@ -133,9 +133,12 @@ propose_dag(
 
 ```bash
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞'
 CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
+
+接入真实 LLM API 后，建议再加上 `--verbose`，直接检查 function calling 契约、tool 注册载荷和决策轨迹。
 
 ## 🧷 Framework Demo
 
@@ -146,6 +149,7 @@ CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 - `finalize_weather_answer`
 - `route_next_node(...)`
 - `propose_dag(...)`
+- 自定义节点注册 + AI 路由 + 沙箱执行 + patch 合并 + 结构化摘要
 
 ## 📎 说明
 

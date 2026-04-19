@@ -254,7 +254,7 @@ func validateAIConfig(cfg AIConfig) error {
 		if provider == "mock" || provider == "compatible" {
 			return fmt.Errorf("legacy ai provider %q is no longer supported; use function-calling providers only", provider)
 		}
-		if !slicesContains([]string{"mock_function", "openai", "openai_compatible", "anthropic"}, provider) {
+		if !slicesContains([]string{"mock_function", "openai", "openai_compatible", "qwen", "kimi", "glm", "anthropic"}, provider) {
 			return fmt.Errorf("unsupported ai provider %q", provider)
 		}
 	}

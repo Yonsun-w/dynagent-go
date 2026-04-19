@@ -51,7 +51,7 @@ DynAgent 当前已经是一个**可运行的动态 Agent 执行内核**，但它
 
 ## 2. 第一次接起来怎么跑
 
-### 2.1 本地运行 demo
+### 2.1 本地运行天气 demo
 
 ```bash
 CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
@@ -60,14 +60,52 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
 这条命令会：
 
 - 初始化框架
-- 注册天气场景节点
+- 注册 3 个天气场景自定义节点
 - 构造一个 demo 任务
 - 跑完整条执行链
-- 输出结构化摘要
+- 输出 provider 信息、function calling 契约、决策轨迹和结构化摘要
 
 适合第一次确认“框架主干是通的”。
 
-### 2.2 启动 HTTP 服务
+### 2.2 接入真实 LLM API 后快速跑通
+
+最短路径是：
+
+1. 选择一个 provider：`openai` / `qwen` / `kimi` / `glm`
+2. 配好 `endpoint`、`model`、`api_key_env`
+3. 导出对应环境变量
+4. 运行 demo
+
+示例：
+
+```yaml
+ai:
+  routing_mode: route_and_plan
+  primary:
+    provider: openai
+    endpoint: "https://your-provider-endpoint"
+    model: "your-model"
+    api_key_env: "LLM_API_KEY"
+    timeout: 10s
+  fallback:
+    provider: mock_function
+    endpoint: ""
+    model: "mock-function-fallback"
+    api_key_env: ""
+    timeout: 5s
+```
+
+```bash
+export LLM_API_KEY="your-api-key"
+
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞' \
+  --verbose
+```
+
+如果配置不完整，demo 会在启动前直接失败，不会等到运行时再给你一个含糊的 HTTP 错误。
+
+### 2.3 启动 HTTP 服务
 
 ```bash
 CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
@@ -95,7 +133,7 @@ curl -X POST http://localhost:8080/v1/tasks/<task_id>/resume
 curl http://localhost:8080/v1/nodes
 ```
 
-### 2.3 这些接口分别做什么
+### 2.4 这些接口分别做什么
 
 - `POST /v1/tasks`
   创建任务并同步跑完整链路。
@@ -155,7 +193,7 @@ DynAgent 跑动态节点链
 
 ### Step 1：先接真实模型
 
-当前默认配置里：
+当前默认配置里仍然是：
 
 - `ai.primary.provider: mock_function`
 - `ai.fallback.provider: mock_function`
@@ -183,10 +221,13 @@ AI 网关实现位置在：
 
 - `mock_function`
 - `openai`
+- `qwen`
+- `kimi`
+- `glm`
 - `openai_compatible`
 - `anthropic`
 
-如果你的模型网关是 OpenAI 兼容协议，最简单的方式通常是走 `openai_compatible`。
+推荐优先直接使用厂商 provider 名称；如果你的模型网关只是兼容 OpenAI 协议但没有单独 provider 名称，也可以走 `openai_compatible`。
 
 #### 推荐的路由接法：固定 Function Calling
 
@@ -252,6 +293,14 @@ type Node interface {
 - 不要假设一定从某个固定前置节点进入
 - 只依赖当前 `ReadOnlyState`
 - 结果通过 `Patch` 返回
+
+当前天气 demo 里的 3 个节点就是最小接入模板：
+
+- `resolve_user_location`
+- `query_weather`
+- `finalize_weather_answer`
+
+你可以直接仿照 [weatherdemo.go](/Users/admin/ai_project/internal/demo/weatherdemo/weatherdemo.go) 里的天气节点模板，复制节点结构去改自己的业务逻辑。
 
 ### Step 3：让调度器能发现你的节点
 

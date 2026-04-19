@@ -30,6 +30,19 @@ ai:
     model: mock-function-fallback
     api_key_env: ""
     timeout: 5s
+  # Real LLM example:
+  # primary:
+  #   provider: openai   # also supports: qwen, kimi, glm, anthropic
+  #   endpoint: "https://your-provider-endpoint"
+  #   model: "your-model"
+  #   api_key_env: "LLM_API_KEY"
+  #   timeout: 10s
+  # fallback:
+  #   provider: mock_function
+  #   endpoint: ""
+  #   model: mock-function-fallback
+  #   api_key_env: ""
+  #   timeout: 5s
   retry:
     max_attempts: 2
     base_delay: 300ms

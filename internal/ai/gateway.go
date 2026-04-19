@@ -131,6 +131,9 @@ func NewGateway(cfg config.AIConfig, logger *zap.Logger) *Gateway {
 			"mock_function":     mockFunctionProvider{},
 			"openai":            openAIProvider{kind: "openai"},
 			"openai_compatible": openAIProvider{kind: "openai_compatible"},
+			"qwen":              openAIProvider{kind: "qwen"},
+			"kimi":              openAIProvider{kind: "kimi"},
+			"glm":               openAIProvider{kind: "glm"},
 			"anthropic":         anthropicProvider{},
 		},
 		limiter: rate.NewLimiter(rate.Limit(cfg.RateLimit.RequestsPerSecond), cfg.RateLimit.Burst),
@@ -515,6 +518,9 @@ func (p openAIProvider) Invoke(ctx context.Context, cfg config.ModelConfig, req 
 	if err != nil {
 		return FunctionCall{}, resp.StatusCode, fmt.Errorf("read openai response: %w", err)
 	}
+	if resp.StatusCode >= 400 {
+		return FunctionCall{}, resp.StatusCode, fmt.Errorf("openai-compatible provider returned status %d: %s", resp.StatusCode, string(data))
+	}
 	functionCall, err := parseOpenAIFunctionCall(data)
 	if err != nil {
 		return FunctionCall{}, resp.StatusCode, err
@@ -555,6 +561,9 @@ func (anthropicProvider) Invoke(ctx context.Context, cfg config.ModelConfig, req
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return FunctionCall{}, resp.StatusCode, fmt.Errorf("read anthropic response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return FunctionCall{}, resp.StatusCode, fmt.Errorf("anthropic provider returned status %d: %s", resp.StatusCode, string(data))
 	}
 	functionCall, err := parseAnthropicFunctionCall(data)
 	if err != nil {
@@ -691,6 +700,26 @@ func BuildOpenAITools(ctx RoutingContext) []map[string]any {
 
 func BuildAnthropicTools(ctx RoutingContext) []map[string]any {
 	return buildAnthropicTools(ctx)
+}
+
+func BuildProviderRegistrationPayload(ctx context.Context, cfg config.ModelConfig, req Request) (map[string]any, error) {
+	switch providerFamily(normalizeProviderName(cfg.Provider)) {
+	case "openai_compatible":
+		return buildOpenAIRequest(ctx, cfg, req)
+	case "anthropic":
+		return buildAnthropicRequest(cfg, req)
+	case "mock_function":
+		return map[string]any{
+			"provider":   "mock_function",
+			"mode":       "in_memory_function_call",
+			"model":      cfg.Model,
+			"functions":  BuildFunctionDefs(req.Context),
+			"note":       "mock_function provider does not perform outbound API registration",
+			"tool_count": len(BuildFunctionDefs(req.Context)),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported provider %q", cfg.Provider)
+	}
 }
 
 func buildRouteDecisionSchema(candidates []CandidateNode) map[string]any {

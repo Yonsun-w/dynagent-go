@@ -2,41 +2,21 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
-	"strings"
-	"time"
-
-	"github.com/admin/ai_project/internal/ai"
-	"github.com/admin/ai_project/internal/app"
 	"github.com/admin/ai_project/internal/config"
-	"github.com/admin/ai_project/internal/node"
-	"github.com/admin/ai_project/internal/platform"
-	"github.com/admin/ai_project/internal/state"
-)
-
-// 这个 demo 直接复用 DynAgent 框架本身：
-// 1. 加载配置并初始化 app
-// 2. 注册天气场景节点
-// 3. 让 AI 网关通过 function calling 选择下一跳
-// 4. 由 engine 负责调度、沙箱执行、状态合并、摘要输出
-//
-// 这里没有额外再造一套 ToolRegistry / Agent / State / Scheduler。
-
-const (
-	nodeResolveLocation = "resolve_user_location"
-	nodeQueryWeather    = "query_weather"
-	nodeFinalizeWeather = "finalize_weather_answer"
+	"github.com/admin/ai_project/internal/demo/weatherdemo"
+	"os"
 )
 
 func main() {
 	var configPath string
 	var prompt string
+	var verbose bool
 
 	flag.StringVar(&configPath, "config", "./configs/config.yaml", "配置文件路径")
 	flag.StringVar(&prompt, "prompt", "帮我查一下我当前位置的天气，并告诉我要不要带伞。", "用户输入")
+	flag.BoolVar(&verbose, "verbose", false, "输出完整的路由上下文、tool 注册载荷和状态快照")
 	flag.Parse()
 
 	cfg, err := config.Load(configPath)
@@ -45,288 +25,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// demo 默认打开规划能力，方便把 propose_dag(...) 和 route_next_node(...) 都走一遍。
 	cfg.AI.RoutingMode = "route_and_plan"
 
-	ctx := context.Background()
-	application, err := app.New(ctx, cfg)
+	result, err := weatherdemo.Run(context.Background(), cfg, prompt, verbose)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "初始化应用失败: %v\n", err)
-		os.Exit(1)
-	}
-	defer func() {
-		_ = application.Close(context.Background())
-	}()
-
-	for _, n := range []node.Node{
-		resolveUserLocationNode{},
-		queryWeatherNode{},
-		finalizeWeatherAnswerNode{},
-	} {
-		if err := application.Registry.RegisterBuiltin(n); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "注册节点失败: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	taskID := fmt.Sprintf("weather-demo-%d", time.Now().UnixNano())
-	st, err := state.New(taskID, platform.NewTraceID(), state.UserInput{
-		Text:     prompt,
-		Keywords: []string{"weather", "demo"},
-		Ext:      map[string]any{"scene": "weather_demo"},
-	}, map[string]string{"demo": "weather"})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "初始化状态失败: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "天气 demo 执行失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	summaryPayload, err := application.Engine.Run(ctx, st)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "执行任务失败: %v\n", err)
-		os.Exit(1)
-	}
-
-	record, err := application.Store.GetTask(ctx, taskID)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "读取任务记录失败: %v\n", err)
-		os.Exit(1)
-	}
-
-	readonly, err := record.State.ReadOnly()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "构造只读状态失败: %v\n", err)
-		os.Exit(1)
-	}
-	candidateNodes := buildCandidateNodes(application.Registry.List())
-	routingContext := ai.RoutingContext{
-		TaskID:           taskID,
-		UserInput:        prompt,
-		Keywords:         record.State.UserInput.Keywords,
-		State:            readonly,
-		CandidateNodes:   candidateNodes,
-		RecommendedNodes: []string{nodeResolveLocation, nodeQueryWeather, nodeFinalizeWeather},
-		PlanningEnabled:  true,
-	}
-	functionDefs := ai.BuildFunctionDefs(routingContext)
-
-	// 这里打印的是框架真实产物：
-	// - candidate_nodes / node_contracts：Node 执行层协议
-	// - function_definitions / openai_tools / anthropic_tools：注册给大模型的 Function Calling 协议
-	// - summary：结构化摘要
-	// - decision_log：函数调用轨迹
-	// - node_outputs：节点结果
-	payload := map[string]any{
-		"task_id":              taskID,
-		"routing_mode":         cfg.AI.RoutingMode,
-		"candidate_nodes":      candidateNodes,
-		"node_contracts":       buildNodeContracts(application.Registry.List()),
-		"routing_context":      buildDemoRoutingContext(routingContext),
-		"function_definitions": functionDefs,
-		"openai_tools":         ai.BuildOpenAITools(routingContext),
-		"anthropic_tools":      ai.BuildAnthropicTools(routingContext),
-		"summary":              summaryPayload,
-		"decision_log":         record.State.DecisionLog,
-		"node_outputs":         record.State.NodeOutputs,
-		"working_memory":       record.State.WorkingMemory,
-		"design_notes": map[string]any{
-			"function_layer": "Functions are LLM-facing routing/planning contracts.",
-			"node_layer":     "Nodes are runtime execution units. Functions select node IDs; functions do not execute business logic directly.",
-			"coupling":       "The runtime maps function arguments like next_node to registered node IDs, but function definitions and node implementations remain separate layers.",
-		},
-	}
-
-	raw, err := json.MarshalIndent(payload, "", "  ")
+	raw, err := weatherdemo.Marshal(result)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "序列化输出失败: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println(string(raw))
-}
-
-// resolveUserLocationNode 模拟“查询用户当前位置”。
-// 节点只返回 patch，由引擎统一合并进主 State。
-type resolveUserLocationNode struct{}
-
-func (resolveUserLocationNode) Meta() node.Meta {
-	return node.Meta{
-		ID:           nodeResolveLocation,
-		Version:      "v1",
-		Description:  "Resolve the current user location before weather lookup.",
-		Labels:       []string{"weather", "tool", "location"},
-		InputSchema:  node.Schema{Required: []string{"user_input.text"}},
-		OutputSchema: node.Schema{Required: []string{"location"}},
-	}
-}
-
-func (resolveUserLocationNode) CheckBefore(ctx context.Context, st *state.ReadOnlyState) node.CheckResult {
-	_ = ctx
-	snapshot := st.Snapshot()
-	if strings.TrimSpace(snapshot.UserInput.Text) == "" {
-		return node.CheckResult{Allowed: false, Reason: "user input text is empty"}
-	}
-	if _, ok := snapshot.WorkingMemory["location"]; ok {
-		return node.CheckResult{Allowed: false, Reason: "location already exists"}
-	}
-	return node.CheckResult{Allowed: true}
-}
-
-func (resolveUserLocationNode) Execute(ctx context.Context, st *state.ReadOnlyState) node.Result {
-	_ = ctx
-	location := "上海市浦东新区"
-	return node.Result{
-		Success: true,
-		Output: map[string]any{
-			"location": location,
-		},
-		Patch: state.Patch{
-			WorkingMemory: map[string]any{
-				"location": location,
-			},
-			NodeOutputs: map[string]map[string]any{
-				nodeResolveLocation: {"location": location},
-			},
-		},
-	}
-}
-
-// queryWeatherNode 模拟“根据当前位置查询天气”。
-// 这里不真正调用天气 API，只返回稳定的 mock 结果。
-type queryWeatherNode struct{}
-
-func (queryWeatherNode) Meta() node.Meta {
-	return node.Meta{
-		ID:           nodeQueryWeather,
-		Version:      "v1",
-		Description:  "Query weather data by location.",
-		Labels:       []string{"weather", "tool"},
-		InputSchema:  node.Schema{Required: []string{"working_memory.location"}},
-		OutputSchema: node.Schema{Required: []string{"weather"}},
-	}
-}
-
-func (queryWeatherNode) CheckBefore(ctx context.Context, st *state.ReadOnlyState) node.CheckResult {
-	_ = ctx
-	snapshot := st.Snapshot()
-	if strings.TrimSpace(fmt.Sprint(snapshot.WorkingMemory["location"])) == "" {
-		return node.CheckResult{Allowed: false, Reason: "location is empty"}
-	}
-	if _, ok := snapshot.WorkingMemory["weather"]; ok {
-		return node.CheckResult{Allowed: false, Reason: "weather already exists"}
-	}
-	return node.CheckResult{Allowed: true}
-}
-
-func (queryWeatherNode) Execute(ctx context.Context, st *state.ReadOnlyState) node.Result {
-	_ = ctx
-	location := fmt.Sprint(st.Snapshot().WorkingMemory["location"])
-	weather := "多云，24°C，东南风 3 级"
-	return node.Result{
-		Success: true,
-		Output: map[string]any{
-			"location": location,
-			"weather":  weather,
-		},
-		Patch: state.Patch{
-			WorkingMemory: map[string]any{
-				"weather": weather,
-			},
-			NodeOutputs: map[string]map[string]any{
-				nodeQueryWeather: {
-					"location": location,
-					"weather":  weather,
-				},
-			},
-		},
-	}
-}
-
-// finalizeWeatherAnswerNode 负责根据位置和天气生成最终结论。
-type finalizeWeatherAnswerNode struct{}
-
-func (finalizeWeatherAnswerNode) Meta() node.Meta {
-	return node.Meta{
-		ID:           nodeFinalizeWeather,
-		Version:      "v1",
-		Description:  "Generate the final weather answer for the user.",
-		Labels:       []string{"weather", "terminal"},
-		InputSchema:  node.Schema{Required: []string{"working_memory.location", "working_memory.weather"}},
-		OutputSchema: node.Schema{Required: []string{"final_text"}},
-	}
-}
-
-func (finalizeWeatherAnswerNode) CheckBefore(ctx context.Context, st *state.ReadOnlyState) node.CheckResult {
-	_ = ctx
-	snapshot := st.Snapshot()
-	if strings.TrimSpace(fmt.Sprint(snapshot.WorkingMemory["location"])) == "" {
-		return node.CheckResult{Allowed: false, Reason: "location is empty"}
-	}
-	if strings.TrimSpace(fmt.Sprint(snapshot.WorkingMemory["weather"])) == "" {
-		return node.CheckResult{Allowed: false, Reason: "weather is empty"}
-	}
-	if _, ok := snapshot.WorkingMemory["final_text"]; ok {
-		return node.CheckResult{Allowed: false, Reason: "final_text already exists"}
-	}
-	return node.CheckResult{Allowed: true}
-}
-
-func (finalizeWeatherAnswerNode) Execute(ctx context.Context, st *state.ReadOnlyState) node.Result {
-	_ = ctx
-	snapshot := st.Snapshot()
-	location := fmt.Sprint(snapshot.WorkingMemory["location"])
-	weather := fmt.Sprint(snapshot.WorkingMemory["weather"])
-	finalText := fmt.Sprintf("你当前在%s，天气%s。建议带伞，穿一件轻薄外套。", location, weather)
-	return node.Result{
-		Success: true,
-		Output: map[string]any{
-			"final_text": finalText,
-		},
-		Patch: state.Patch{
-			WorkingMemory: map[string]any{
-				"final_text": finalText,
-			},
-			NodeOutputs: map[string]map[string]any{
-				nodeFinalizeWeather: {"final_text": finalText},
-			},
-		},
-	}
-}
-
-func buildCandidateNodes(metas []node.Meta) []ai.CandidateNode {
-	out := make([]ai.CandidateNode, 0, len(metas))
-	for _, meta := range metas {
-		out = append(out, ai.CandidateNode{
-			ID:          meta.ID,
-			Description: meta.Description,
-			Labels:      append([]string(nil), meta.Labels...),
-		})
-	}
-	return out
-}
-
-func buildNodeContracts(metas []node.Meta) []map[string]any {
-	out := make([]map[string]any, 0, len(metas))
-	for _, meta := range metas {
-		out = append(out, map[string]any{
-			"id":            meta.ID,
-			"description":   meta.Description,
-			"labels":        meta.Labels,
-			"input_schema":  meta.InputSchema,
-			"output_schema": meta.OutputSchema,
-		})
-	}
-	return out
-}
-
-func buildDemoRoutingContext(ctx ai.RoutingContext) map[string]any {
-	snapshot, _ := ctx.State.ToMap()
-	return map[string]any{
-		"task_id":               ctx.TaskID,
-		"user_input":            ctx.UserInput,
-		"keywords":              ctx.Keywords,
-		"candidate_nodes":       ctx.CandidateNodes,
-		"recommended_nodes":     ctx.RecommendedNodes,
-		"planning_enabled":      ctx.PlanningEnabled,
-		"last_rejection_reason": ctx.LastRejectionReason,
-		"state":                 snapshot,
-	}
 }

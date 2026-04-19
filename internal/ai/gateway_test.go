@@ -103,6 +103,60 @@ func TestBuildOpenAIRequest_UsesFunctionCallingContract(t *testing.T) {
 	}
 }
 
+func TestBuildProviderRegistrationPayload_OpenAICompatible(t *testing.T) {
+	t.Parallel()
+
+	ctx := platform.ContextWithTraceID(context.Background(), "trace-provider")
+	payload, err := BuildProviderRegistrationPayload(ctx, config.ModelConfig{
+		Provider: "qwen",
+		Model:    "qwen-turbo",
+		Endpoint: "https://example.com/v1/chat/completions",
+	}, Request{
+		Context: RoutingContext{
+			TaskID:           "task-route",
+			UserInput:        "帮我查天气",
+			Keywords:         []string{"天气"},
+			State:            mustReadOnlyState(t),
+			CandidateNodes:   []CandidateNode{{ID: "resolve_user_location"}, {ID: "query_weather"}},
+			RecommendedNodes: []string{"resolve_user_location"},
+			PlanningEnabled:  true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProviderRegistrationPayload returned error: %v", err)
+	}
+	if payload["model"] != "qwen-turbo" {
+		t.Fatalf("expected model to be preserved, got %#v", payload["model"])
+	}
+	if payload["tool_choice"] != "required" {
+		t.Fatalf("expected tool_choice=required, got %#v", payload["tool_choice"])
+	}
+}
+
+func TestBuildProviderRegistrationPayload_Mock(t *testing.T) {
+	t.Parallel()
+
+	payload, err := BuildProviderRegistrationPayload(context.Background(), config.ModelConfig{
+		Provider: "mock_function",
+		Model:    "mock-function-router",
+	}, Request{
+		Context: RoutingContext{
+			TaskID:          "task-route",
+			UserInput:       "帮我查天气",
+			Keywords:        []string{"天气"},
+			State:           mustReadOnlyState(t),
+			CandidateNodes:  []CandidateNode{{ID: "resolve_user_location"}, {ID: "query_weather"}},
+			PlanningEnabled: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProviderRegistrationPayload returned error: %v", err)
+	}
+	if payload["provider"] != "mock_function" {
+		t.Fatalf("expected mock provider payload, got %#v", payload["provider"])
+	}
+}
+
 func TestNormalizeFunctionCall_RouteAndPlan(t *testing.T) {
 	t.Parallel()
 

@@ -163,6 +163,42 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
   --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞'
 ```
 
+接入真实 LLM API 后，推荐这样跑：
+
+```bash
+export LLM_API_KEY="your-api-key"
+
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞' \
+  --verbose
+```
+
+这个 demo 现在默认会完整穿过这条链路：
+
+1. 注册 3 个自定义天气节点
+2. 把候选节点和只读状态组装成 `routing_context`
+3. 通过 function calling 注册 `route_next_node(...)` / `propose_dag(...)`
+4. 让 LLM 只返回函数调用，不直接执行业务逻辑
+5. Runtime 校验准入规则并在沙箱内执行节点
+6. 合并 patch、生成轨迹、输出结构化摘要
+
+如果你已经接入了真实模型，默认输出会直接展示：
+
+- `provider_info`
+- `registered_nodes`
+- `function_contracts`
+- `llm_registration`
+- `decision_trace`
+- `node_outputs`
+- `final_summary`
+
+加上 `--verbose` 会额外输出：
+
+- `routing_context`
+- `openai_tools`
+- `anthropic_tools`
+- `runtime_state`
+
 提交任务：
 
 ```bash

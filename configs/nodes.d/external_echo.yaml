@@ -1,0 +1,25 @@
+id: external_echo
+version: v1
+description: External echo node that copies text from input to working memory.
+labels: ["demo", "external"]
+address: "127.0.0.1:9091"
+autostart: true
+command: "go"
+args:
+  - "run"
+  - "./cmd/node-runner"
+  - "--manifest"
+  - "./configs/nodes.d/external_echo.yaml"
+handler: "external_echo"
+timeout: 5s
+input_schema:
+  required:
+    - user_input.text
+output_schema:
+  required:
+    - echoed_text
+rules:
+  operator: and
+  rules:
+    - expression: "state.user_input.text != ''"
+      reason: "user_input.text is required"

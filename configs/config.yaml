@@ -1,0 +1,68 @@
+service:
+  name: dynagent
+  env: local
+
+server:
+  address: ":8080"
+  read_timeout: 10s
+  write_timeout: 15s
+  shutdown_timeout: 15s
+
+execution:
+  max_steps: 12
+  task_timeout: 90s
+  node_timeout: 10s
+  max_parallel_nodes: 16
+  loop_window: 4
+  max_same_node_visits: 3
+
+ai:
+  primary:
+    provider: mock
+    endpoint: ""
+    model: mock-router
+    api_key_env: ""
+    timeout: 5s
+  fallback:
+    provider: mock
+    endpoint: ""
+    model: mock-fallback
+    api_key_env: ""
+    timeout: 5s
+  retry:
+    max_attempts: 2
+    base_delay: 300ms
+  rate_limit:
+    requests_per_second: 20
+    burst: 10
+  circuit_breaker:
+    max_requests: 2
+    interval: 30s
+    timeout: 20s
+    failure_ratio: 0.6
+
+storage:
+  backend: memory
+  postgres_dsn: "postgres://dynagent:dynagent@localhost:5432/dynagent?sslmode=disable"
+  redis_addr: "localhost:6379"
+  redis_password: ""
+  redis_db: 0
+  cold_data_dir: "./var/cold"
+
+observability:
+  log_level: info
+  metrics_path: /metrics
+  otlp_endpoint: ""
+  enable_pprof: false
+
+security:
+  sensitive_fields:
+    - api_key
+    - password
+    - token
+  encryption_key: "0123456789abcdef0123456789abcdef"
+
+nodes:
+  manifest_dir: "./configs/nodes.d"
+  poll_interval: 3s
+  grpc_dial_timeout: 3s

@@ -24,112 +24,112 @@
       <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#020617" flood-opacity="0.34"/>
     </filter>
     <style>
-      .title { font: 700 34px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F8FAFC; }
-      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #94A3B8; }
-      .section { font: 700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #CBD5E1; letter-spacing: 0.14em; text-transform: uppercase; }
-      .card { font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F8FAFC; }
-      .meta { font: 500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #94A3B8; }
+      .title { font: 700 34px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #F8FAFC; }
+      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #94A3B8; }
+      .section { font: 700 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #CBD5E1; letter-spacing: 0.12em; }
+      .card { font: 700 20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #F8FAFC; }
+      .meta { font: 500 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #94A3B8; }
       .code { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #BFDBFE; }
     </style>
   </defs>
   <rect width="1600" height="960" rx="32" fill="url(#bg)"/>
-  <text x="84" y="84" class="title">DynAgent Runtime Architecture</text>
-  <text x="84" y="116" class="sub">Topology-free execution kernel: AI routes, runtime constrains, scheduler owns state.</text>
+  <text x="84" y="84" class="title">DynAgent 架构图</text>
+  <text x="84" y="116" class="sub">无预设拓扑执行内核：AI 负责路由，Runtime 负责约束，调度器负责状态所有权。</text>
 
-  <text x="84" y="164" class="section">Ingress</text>
-  <text x="432" y="164" class="section">Core Runtime</text>
-  <text x="1110" y="164" class="section">Execution + Data</text>
+  <text x="84" y="164" class="section">接入层</text>
+  <text x="432" y="164" class="section">运行时内核</text>
+  <text x="1110" y="164" class="section">执行与数据层</text>
 
   <rect x="84" y="206" width="260" height="126" rx="28" fill="url(#panel)" stroke="#24324D" filter="url(#shadow)"/>
   <rect x="110" y="232" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M126 257h18M135 248v18" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
-  <text x="182" y="258" class="card">Client</text>
-  <text x="182" y="286" class="meta">API caller / SDK / worker</text>
+  <text x="182" y="258" class="card">调用方</text>
+  <text x="182" y="286" class="meta">API / SDK / Worker</text>
 
   <rect x="84" y="370" width="260" height="150" rx="28" fill="url(#panel)" stroke="#24324D" filter="url(#shadow)"/>
   <rect x="110" y="396" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <path d="M124 414h22M124 426h22M124 438h16" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <text x="182" y="422" class="card">HTTP API</text>
-  <text x="182" y="450" class="meta">submit / query / replay / resume</text>
+  <text x="182" y="450" class="meta">提交 / 查询 / 回放 / 续跑</text>
   <text x="110" y="486" class="code">POST /v1/tasks</text>
 
   <rect x="432" y="206" width="288" height="150" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="458" y="232" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M472 249h22M472 261h22M472 273h14" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
-  <text x="530" y="258" class="card">Router</text>
-  <text x="530" y="286" class="meta">control loop</text>
-  <text x="458" y="322" class="code">decide → admit → execute → merge</text>
+  <text x="530" y="258" class="card">路由器</text>
+  <text x="530" y="286" class="meta">主调度循环</text>
+  <text x="458" y="322" class="code">决策 → 准入 → 执行 → 合并</text>
 
   <rect x="752" y="206" width="288" height="150" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="778" y="232" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <circle cx="803" cy="257" r="11" stroke="#0F172A" stroke-width="3.2"/>
   <path d="M795 257h16M803 249v16" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
-  <text x="850" y="258" class="card">AI Gateway</text>
-  <text x="850" y="286" class="meta">retry / fallback / normalize</text>
+  <text x="850" y="258" class="card">AI 网关</text>
+  <text x="850" y="286" class="meta">重试 / 降级 / 归一化</text>
   <text x="778" y="322" class="code">{next_node, reasoning, data}</text>
 
   <rect x="432" y="396" width="288" height="150" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="458" y="422" width="50" height="50" rx="16" fill="url(#accent3)"/>
   <path d="M473 447l8 8 15-15" stroke="#0F172A" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="530" y="448" class="card">Rules</text>
-  <text x="530" y="476" class="meta">CEL gate</text>
-  <text x="458" y="512" class="code">allow / reject / reason</text>
+  <text x="530" y="448" class="card">规则链</text>
+  <text x="530" y="476" class="meta">CEL 准入校验</text>
+  <text x="458" y="512" class="code">允许 / 拒绝 / 原因</text>
 
   <rect x="752" y="396" width="288" height="150" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="778" y="422" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M792 448h22M803 437v22" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
-  <text x="850" y="448" class="card">Sandbox</text>
-  <text x="850" y="476" class="meta">timeout / recover / pool</text>
-  <text x="778" y="512" class="code">isolated node execution</text>
+  <text x="850" y="448" class="card">沙箱</text>
+  <text x="850" y="476" class="meta">超时 / recover / 并发池</text>
+  <text x="778" y="512" class="code">隔离节点执行</text>
 
   <rect x="432" y="586" width="288" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="458" y="612" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <path d="M471 625h24v24h-24zM477 631h12v12h-12z" stroke="#0F172A" stroke-width="3.2"/>
-  <text x="530" y="638" class="card">State Bus</text>
-  <text x="530" y="666" class="meta">state / snapshots</text>
-  <text x="458" y="704" class="code">readonly in</text>
-  <text x="458" y="726" class="code">merge out</text>
+  <text x="530" y="638" class="card">状态总线</text>
+  <text x="530" y="666" class="meta">状态 / 快照</text>
+  <text x="458" y="704" class="code">只读输入</text>
+  <text x="458" y="726" class="code">统一合并</text>
 
   <rect x="752" y="586" width="288" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="778" y="612" width="50" height="50" rx="16" fill="url(#accent3)"/>
   <path d="M793 648c4-9 11-14 20-14s16 5 20 14" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <circle cx="813" cy="636" r="5" fill="#0F172A"/>
   <circle cx="833" cy="636" r="5" fill="#0F172A"/>
-  <text x="850" y="638" class="card">Memory</text>
-  <text x="850" y="666" class="meta">trajectory recall</text>
-  <text x="778" y="704" class="code">node hints</text>
+  <text x="850" y="638" class="card">图记忆</text>
+  <text x="850" y="666" class="meta">轨迹召回</text>
+  <text x="778" y="704" class="code">候选节点提示</text>
 
   <rect x="1110" y="206" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1136" y="232" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M1150 249l18 18M1168 249l-18 18" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
-  <text x="1206" y="258" class="card">Builtin</text>
+  <text x="1206" y="258" class="card">内置节点</text>
   <text x="1136" y="320" class="code">intent_parse</text>
   <text x="1136" y="342" class="code">finalize</text>
 
   <rect x="1330" y="206" width="186" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1356" y="232" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <path d="M1370 249h22v22h-22z" stroke="#0F172A" stroke-width="3.2"/>
-  <text x="1426" y="258" class="card">Ext</text>
+  <text x="1426" y="258" class="card">外部节点</text>
   <text x="1426" y="286" class="meta">manifest + gRPC</text>
 
   <rect x="1110" y="436" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1136" y="462" width="50" height="50" rx="16" fill="url(#accent3)"/>
   <path d="M1150 487h22M1161 476v22" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <text x="1206" y="488" class="card">Postgres</text>
-  <text x="1206" y="516" class="meta">tasks / steps / snapshots</text>
+  <text x="1206" y="516" class="meta">任务 / 步骤 / 快照</text>
 
   <rect x="1330" y="436" width="186" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1356" y="462" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M1369 486h24" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <path d="M1374 474h14v24h-14z" stroke="#0F172A" stroke-width="3.2"/>
   <text x="1426" y="488" class="card">Redis</text>
-  <text x="1426" y="516" class="meta">cache / short memory</text>
+  <text x="1426" y="516" class="meta">缓存 / 短期记忆</text>
 
   <rect x="1110" y="666" width="406" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1136" y="692" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <path d="M1151 719l8 8 14-14" stroke="#0F172A" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="1206" y="718" class="card">Observability</text>
-  <text x="1206" y="746" class="meta">logs / metrics / traces</text>
+  <text x="1206" y="718" class="card">可观测性</text>
+  <text x="1206" y="746" class="meta">日志 / 指标 / Trace</text>
   <text x="1136" y="784" class="code">trace → execution → persistence</text>
 
   <path d="M344 444H404" stroke="#60A5FA" stroke-width="4" stroke-linecap="round"/>

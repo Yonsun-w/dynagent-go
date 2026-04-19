@@ -35,7 +35,7 @@ NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Gra
 
 ## 🗺️ 架构图
 
-![DynAgent 现代化架构图](./docs/assets/architecture-modern.svg)
+![DynAgent 现代化架构图](./docs/assets/architecture-modern-zh.svg)
 
 ## 🔁 控制环
 
@@ -45,11 +45,6 @@ NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Gra
 
 ![DynAgent AI 决策与数据流](./docs/assets/ai-decision-modern.svg)
 
-## 📈 趋势图
-
-![DynAgent Runtime 趋势图](./docs/assets/trend-runtime.svg)
-
-![DynAgent AI Signal 趋势图](./docs/assets/trend-ai.svg)
 
 ## 🧱 仓库结构
 

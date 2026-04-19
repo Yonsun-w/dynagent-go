@@ -14,7 +14,7 @@ DynAgent 的目标，就是把这些职责拆成明确的运行时平面。
 
 ## 2. 总体架构 🗺️
 
-![DynAgent 现代化架构图](./assets/architecture-modern.svg)
+![DynAgent 现代化架构图](./assets/architecture-modern-zh.svg)
 
 ## 3. 模块职责边界 🔬
 
@@ -114,11 +114,6 @@ State
 
 ![DynAgent AI 决策与数据流](./assets/ai-decision-modern.svg)
 
-## 5.2 趋势图 📈
-
-![DynAgent Runtime 趋势图](./assets/trend-runtime.svg)
-
-![DynAgent AI Signal 趋势图](./assets/trend-ai.svg)
 
 每一轮调度在运行时层面是严格固定的：
 

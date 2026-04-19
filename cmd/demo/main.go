@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/admin/ai_project/internal/ai"
 	"github.com/admin/ai_project/internal/app"
 	"github.com/admin/ai_project/internal/config"
 	"github.com/admin/ai_project/internal/node"
@@ -91,17 +92,47 @@ func main() {
 		os.Exit(1)
 	}
 
+	readonly, err := record.State.ReadOnly()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "构造只读状态失败: %v\n", err)
+		os.Exit(1)
+	}
+	candidateNodes := buildCandidateNodes(application.Registry.List())
+	routingContext := ai.RoutingContext{
+		TaskID:           taskID,
+		UserInput:        prompt,
+		Keywords:         record.State.UserInput.Keywords,
+		State:            readonly,
+		CandidateNodes:   candidateNodes,
+		RecommendedNodes: []string{nodeResolveLocation, nodeQueryWeather, nodeFinalizeWeather},
+		PlanningEnabled:  true,
+	}
+	functionDefs := ai.BuildFunctionDefs(routingContext)
+
 	// 这里打印的是框架真实产物：
+	// - candidate_nodes / node_contracts：Node 执行层协议
+	// - function_definitions / openai_tools / anthropic_tools：注册给大模型的 Function Calling 协议
 	// - summary：结构化摘要
 	// - decision_log：函数调用轨迹
 	// - node_outputs：节点结果
 	payload := map[string]any{
-		"task_id":        taskID,
-		"routing_mode":   cfg.AI.RoutingMode,
-		"summary":        summaryPayload,
-		"decision_log":   record.State.DecisionLog,
-		"node_outputs":   record.State.NodeOutputs,
-		"working_memory": record.State.WorkingMemory,
+		"task_id":              taskID,
+		"routing_mode":         cfg.AI.RoutingMode,
+		"candidate_nodes":      candidateNodes,
+		"node_contracts":       buildNodeContracts(application.Registry.List()),
+		"routing_context":      buildDemoRoutingContext(routingContext),
+		"function_definitions": functionDefs,
+		"openai_tools":         ai.BuildOpenAITools(routingContext),
+		"anthropic_tools":      ai.BuildAnthropicTools(routingContext),
+		"summary":              summaryPayload,
+		"decision_log":         record.State.DecisionLog,
+		"node_outputs":         record.State.NodeOutputs,
+		"working_memory":       record.State.WorkingMemory,
+		"design_notes": map[string]any{
+			"function_layer": "Functions are LLM-facing routing/planning contracts.",
+			"node_layer":     "Nodes are runtime execution units. Functions select node IDs; functions do not execute business logic directly.",
+			"coupling":       "The runtime maps function arguments like next_node to registered node IDs, but function definitions and node implementations remain separate layers.",
+		},
 	}
 
 	raw, err := json.MarshalIndent(payload, "", "  ")
@@ -257,5 +288,45 @@ func (finalizeWeatherAnswerNode) Execute(ctx context.Context, st *state.ReadOnly
 				nodeFinalizeWeather: {"final_text": finalText},
 			},
 		},
+	}
+}
+
+func buildCandidateNodes(metas []node.Meta) []ai.CandidateNode {
+	out := make([]ai.CandidateNode, 0, len(metas))
+	for _, meta := range metas {
+		out = append(out, ai.CandidateNode{
+			ID:          meta.ID,
+			Description: meta.Description,
+			Labels:      append([]string(nil), meta.Labels...),
+		})
+	}
+	return out
+}
+
+func buildNodeContracts(metas []node.Meta) []map[string]any {
+	out := make([]map[string]any, 0, len(metas))
+	for _, meta := range metas {
+		out = append(out, map[string]any{
+			"id":            meta.ID,
+			"description":   meta.Description,
+			"labels":        meta.Labels,
+			"input_schema":  meta.InputSchema,
+			"output_schema": meta.OutputSchema,
+		})
+	}
+	return out
+}
+
+func buildDemoRoutingContext(ctx ai.RoutingContext) map[string]any {
+	snapshot, _ := ctx.State.ToMap()
+	return map[string]any{
+		"task_id":               ctx.TaskID,
+		"user_input":            ctx.UserInput,
+		"keywords":              ctx.Keywords,
+		"candidate_nodes":       ctx.CandidateNodes,
+		"recommended_nodes":     ctx.RecommendedNodes,
+		"planning_enabled":      ctx.PlanningEnabled,
+		"last_rejection_reason": ctx.LastRejectionReason,
+		"state":                 snapshot,
 	}
 }

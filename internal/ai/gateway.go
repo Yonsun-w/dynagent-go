@@ -639,7 +639,7 @@ func routingContextJSON(ctx RoutingContext) (string, error) {
 }
 
 func buildFunctionTools(ctx RoutingContext) []map[string]any {
-	defs := buildFunctionDefs(ctx)
+	defs := BuildFunctionDefs(ctx)
 	tools := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
 		tools = append(tools, map[string]any{
@@ -655,7 +655,7 @@ func buildFunctionTools(ctx RoutingContext) []map[string]any {
 }
 
 func buildAnthropicTools(ctx RoutingContext) []map[string]any {
-	defs := buildFunctionDefs(ctx)
+	defs := BuildFunctionDefs(ctx)
 	tools := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
 		tools = append(tools, map[string]any{
@@ -667,7 +667,7 @@ func buildAnthropicTools(ctx RoutingContext) []map[string]any {
 	return tools
 }
 
-func buildFunctionDefs(ctx RoutingContext) []FunctionDef {
+func BuildFunctionDefs(ctx RoutingContext) []FunctionDef {
 	defs := []FunctionDef{
 		{
 			Name:        RouteFunctionName,
@@ -685,6 +685,14 @@ func buildFunctionDefs(ctx RoutingContext) []FunctionDef {
 	return defs
 }
 
+func BuildOpenAITools(ctx RoutingContext) []map[string]any {
+	return buildFunctionTools(ctx)
+}
+
+func BuildAnthropicTools(ctx RoutingContext) []map[string]any {
+	return buildAnthropicTools(ctx)
+}
+
 func buildRouteDecisionSchema(candidates []CandidateNode) map[string]any {
 	enum := make([]any, 0, len(candidates)+1)
 	enum = append(enum, terminateNode)
@@ -696,14 +704,17 @@ func buildRouteDecisionSchema(candidates []CandidateNode) map[string]any {
 		"additionalProperties": false,
 		"properties": map[string]any{
 			"next_node": map[string]any{
-				"type": "string",
-				"enum": enum,
+				"type":        "string",
+				"enum":        enum,
+				"description": "Identifier of the next node to execute. Use __terminate__ to stop the runtime loop.",
 			},
 			"reasoning": map[string]any{
-				"type": "string",
+				"type":        "string",
+				"description": "Short explanation for why this node should run next.",
 			},
 			"data": map[string]any{
 				"type":                 "object",
+				"description":          "Structured routing metadata for auditing or downstream use.",
 				"additionalProperties": true,
 			},
 		},
@@ -721,38 +732,46 @@ func buildPlanSchema(candidates []CandidateNode) map[string]any {
 		"additionalProperties": false,
 		"properties": map[string]any{
 			"goal": map[string]any{
-				"type": "string",
+				"type":        "string",
+				"description": "Planning goal for the current task.",
 			},
 			"nodes": map[string]any{
-				"type": "array",
+				"type":        "array",
+				"description": "Candidate node identifiers that should appear in the proposed plan.",
 				"items": map[string]any{
-					"type": "string",
-					"enum": enum,
+					"type":        "string",
+					"enum":        enum,
+					"description": "A node identifier from the current candidate set.",
 				},
 			},
 			"edges": map[string]any{
-				"type": "array",
+				"type":        "array",
+				"description": "Directed edges between planned nodes. This is advisory only and does not bypass runtime validation.",
 				"items": map[string]any{
 					"type":                 "object",
 					"additionalProperties": false,
 					"properties": map[string]any{
 						"from": map[string]any{
-							"type": "string",
-							"enum": enum,
+							"type":        "string",
+							"enum":        enum,
+							"description": "Source node identifier.",
 						},
 						"to": map[string]any{
-							"type": "string",
-							"enum": enum,
+							"type":        "string",
+							"enum":        enum,
+							"description": "Target node identifier.",
 						},
 					},
 					"required": []any{"from", "to"},
 				},
 			},
 			"reasoning": map[string]any{
-				"type": "string",
+				"type":        "string",
+				"description": "Short explanation for the proposed DAG.",
 			},
 			"data": map[string]any{
 				"type":                 "object",
+				"description":          "Structured planning metadata.",
 				"additionalProperties": true,
 			},
 		},

@@ -178,7 +178,8 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 		}
 
 		startedAt := time.Now().UTC()
-		result, err := e.sandbox.Execute(runCtx, entry.Node, readonly)
+		execCtx := node.WithRuntime(runCtx, e.aiGateway)
+		result, err := e.sandbox.Execute(execCtx, entry.Node, readonly)
 		finishedAt := time.Now().UTC()
 		durationSeconds := finishedAt.Sub(startedAt).Seconds()
 		e.metrics.NodeLatency.WithLabelValues(decision.Route.NextNode).Observe(durationSeconds)

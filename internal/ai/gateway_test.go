@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/admin/ai_project/internal/config"
+	"github.com/admin/ai_project/internal/node"
 	"github.com/admin/ai_project/internal/platform"
 	"github.com/admin/ai_project/internal/state"
 )
@@ -154,6 +155,44 @@ func TestBuildProviderRegistrationPayload_Mock(t *testing.T) {
 	}
 	if payload["provider"] != "mock_function" {
 		t.Fatalf("expected mock provider payload, got %#v", payload["provider"])
+	}
+}
+
+func TestBuildProviderTextGenerationPayload_OpenAICompatible(t *testing.T) {
+	t.Parallel()
+
+	payload, err := BuildProviderTextGenerationPayload(context.Background(), config.ModelConfig{
+		Provider: "glm",
+		Model:    "glm-4",
+		Endpoint: "https://example.com/v1/chat/completions",
+	}, node.TextGenerationRequest{
+		SystemPrompt: "system",
+		UserPrompt:   "user",
+		Input:        map[string]any{"weather": "sunny"},
+	})
+	if err != nil {
+		t.Fatalf("BuildProviderTextGenerationPayload returned error: %v", err)
+	}
+	if payload["model"] != "glm-4" {
+		t.Fatalf("expected model to be preserved, got %#v", payload["model"])
+	}
+}
+
+func TestParseOpenAITextResponse(t *testing.T) {
+	t.Parallel()
+
+	text, err := parseOpenAITextResponse([]byte(`{
+		"choices": [{
+			"message": {
+				"content": "今天多云，建议带伞。"
+			}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("parseOpenAITextResponse returned error: %v", err)
+	}
+	if text != "今天多云，建议带伞。" {
+		t.Fatalf("unexpected parsed text: %q", text)
 	}
 }
 

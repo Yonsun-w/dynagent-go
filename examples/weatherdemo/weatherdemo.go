@@ -95,6 +95,20 @@ func Run(ctx context.Context, cfg config.Config, prompt string, verbose bool) (R
 		PlanningEnabled:  cfg.AI.RoutingMode == "route_and_plan",
 	}
 	req := ai.Request{Context: routingContext}
+	finalAnswerRequest := node.TextGenerationRequest{
+		SystemPrompt: "你是天气出行助手。你只能基于给定事实生成中文结论，不要虚构位置和天气数据。",
+		UserPrompt: fmt.Sprintf(
+			"用户问题：%s\n当前位置：%s\n天气事实：%s\n请生成 1 段简洁中文结论，必须包含天气概述和是否带伞的建议。",
+			record.State.UserInput.Text,
+			fmt.Sprint(record.State.WorkingMemory["location"]),
+			fmt.Sprint(record.State.WorkingMemory["weather"]),
+		),
+		Input: map[string]any{
+			"location":   fmt.Sprint(record.State.WorkingMemory["location"]),
+			"weather":    fmt.Sprint(record.State.WorkingMemory["weather"]),
+			"user_input": record.State.UserInput.Text,
+		},
+	}
 
 	primaryRegistration, err := ai.BuildProviderRegistrationPayload(platform.ContextWithTraceID(ctx, record.State.Trace.TraceID), cfg.AI.Primary, req)
 	if err != nil {
@@ -103,6 +117,14 @@ func Run(ctx context.Context, cfg config.Config, prompt string, verbose bool) (R
 	fallbackRegistration, err := ai.BuildProviderRegistrationPayload(platform.ContextWithTraceID(ctx, record.State.Trace.TraceID), cfg.AI.Fallback, req)
 	if err != nil {
 		return Result{}, fmt.Errorf("build fallback provider registration payload: %w", err)
+	}
+	primaryTextGenerationPayload, err := ai.BuildProviderTextGenerationPayload(platform.ContextWithTraceID(ctx, record.State.Trace.TraceID), cfg.AI.Primary, finalAnswerRequest)
+	if err != nil {
+		return Result{}, fmt.Errorf("build primary text generation payload: %w", err)
+	}
+	fallbackTextGenerationPayload, err := ai.BuildProviderTextGenerationPayload(platform.ContextWithTraceID(ctx, record.State.Trace.TraceID), cfg.AI.Fallback, finalAnswerRequest)
+	if err != nil {
+		return Result{}, fmt.Errorf("build fallback text generation payload: %w", err)
 	}
 
 	output := map[string]any{
@@ -132,13 +154,29 @@ func Run(ctx context.Context, cfg config.Config, prompt string, verbose bool) (R
 				"request_payload": fallbackRegistration,
 			},
 		},
+		"llm_content_generation": map[string]any{
+			"responsible_node": nodeFinalizeWeather,
+			"primary": map[string]any{
+				"provider":        ai.DescribeProvider(cfg.AI.Primary),
+				"request_payload": primaryTextGenerationPayload,
+			},
+			"fallback": map[string]any{
+				"provider":        ai.DescribeProvider(cfg.AI.Fallback),
+				"request_payload": fallbackTextGenerationPayload,
+			},
+		},
 		"decision_trace": record.State.DecisionLog,
 		"node_outputs":   record.State.NodeOutputs,
 		"final_summary":  summaryPayload,
 		"how_it_works": []string{
 			"AI gateway sends the routing context to the configured provider by function calling.",
-			"LLM selects the next node identifier instead of executing business logic directly.",
+			"LLM first plans/routes the node sequence, then generates the final weather recommendation inside the terminal node.",
 			"Runtime validates admission rules, runs the node in sandbox, and merges only the returned patch.",
+		},
+		"llm_responsibilities": []string{
+			"propose_dag(...) records a plan proposal for the weather workflow.",
+			"route_next_node(...) selects which node should run next.",
+			"finalize_weather_answer uses runtime.GenerateText(...) so the umbrella suggestion is produced by the model, not hardcoded by the node.",
 		},
 	}
 
@@ -303,22 +341,55 @@ func (finalizeWeatherAnswerNode) CheckBefore(ctx context.Context, st *state.Read
 }
 
 func (finalizeWeatherAnswerNode) Execute(ctx context.Context, st *state.ReadOnlyState) node.Result {
-	_ = ctx
+	runtime, ok := node.RuntimeFromContext(ctx)
+	if !ok {
+		return node.Result{Success: false, Error: "node runtime is unavailable"}
+	}
 	snapshot := st.Snapshot()
 	location := fmt.Sprint(snapshot.WorkingMemory["location"])
 	weather := fmt.Sprint(snapshot.WorkingMemory["weather"])
-	finalText := fmt.Sprintf("你当前在%s，天气%s。建议带伞，穿一件轻薄外套。", location, weather)
+	generation, err := runtime.GenerateText(ctx, node.TextGenerationRequest{
+		SystemPrompt: "你是天气出行助手。你只能基于给定事实生成中文结论，不要虚构位置和天气数据。",
+		UserPrompt: fmt.Sprintf(
+			"用户问题：%s\n当前位置：%s\n天气事实：%s\n请生成 1 段简洁中文结论，必须包含天气概述和是否带伞的建议。",
+			snapshot.UserInput.Text,
+			location,
+			weather,
+		),
+		Input: map[string]any{
+			"location":   location,
+			"weather":    weather,
+			"user_input": snapshot.UserInput.Text,
+		},
+	})
+	if err != nil {
+		return node.Result{Success: false, Error: fmt.Sprintf("generate llm weather answer: %v", err)}
+	}
+	finalText := strings.TrimSpace(generation.Text)
+	if finalText == "" {
+		return node.Result{Success: false, Error: "llm returned empty final_text"}
+	}
 	return node.Result{
 		Success: true,
 		Output: map[string]any{
-			"final_text": finalText,
+			"final_text":          finalText,
+			"generation_provider": generation.Provider,
+			"generation_model":    generation.Model,
 		},
 		Patch: state.Patch{
 			WorkingMemory: map[string]any{
-				"final_text": finalText,
+				"final_text":              finalText,
+				"final_text_provider":     generation.Provider,
+				"final_text_model":        generation.Model,
+				"final_text_generated_by": "llm",
 			},
 			NodeOutputs: map[string]map[string]any{
-				nodeFinalizeWeather: {"final_text": finalText},
+				nodeFinalizeWeather: {
+					"final_text":          finalText,
+					"generation_provider": generation.Provider,
+					"generation_model":    generation.Model,
+					"generation_mode":     "node_llm_generation",
+				},
 			},
 		},
 	}

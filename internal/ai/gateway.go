@@ -17,6 +17,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/admin/ai_project/internal/config"
+	"github.com/admin/ai_project/internal/node"
 	"github.com/admin/ai_project/internal/platform"
 	"github.com/admin/ai_project/internal/state"
 )
@@ -96,6 +97,7 @@ type Request struct {
 type Provider interface {
 	Name() string
 	Invoke(ctx context.Context, cfg config.ModelConfig, req Request) (FunctionCall, int, error)
+	GenerateText(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (node.TextGenerationResult, int, error)
 }
 
 type Gateway struct {
@@ -163,6 +165,26 @@ func (g *Gateway) Decide(ctx context.Context, req Request) (Result, error) {
 	})
 }
 
+func (g *Gateway) GenerateText(ctx context.Context, req node.TextGenerationRequest) (node.TextGenerationResult, error) {
+	if strings.TrimSpace(req.UserPrompt) == "" {
+		return node.TextGenerationResult{}, errors.New("text generation user_prompt must not be empty")
+	}
+	if err := g.limiter.Wait(ctx); err != nil {
+		return node.TextGenerationResult{}, fmt.Errorf("rate limit wait: %w", err)
+	}
+
+	result, _, err := g.tryGenerateModel(ctx, g.primary, req)
+	if err == nil {
+		return result, nil
+	}
+	g.logger.Warn("primary ai model text generation failed, trying fallback", zap.String("provider", g.primary.Provider), zap.Error(err))
+	result, _, fallbackErr := g.tryGenerateModel(ctx, g.fallback, req)
+	if fallbackErr != nil {
+		return node.TextGenerationResult{}, fmt.Errorf("fallback text generation failed after primary error %v: %w", err, fallbackErr)
+	}
+	return result, nil
+}
+
 func (g *Gateway) tryModel(ctx context.Context, cfg config.ModelConfig, req Request) (Result, int, error) {
 	provider, ok := g.provider[strings.ToLower(strings.TrimSpace(cfg.Provider))]
 	if !ok {
@@ -191,6 +213,35 @@ func (g *Gateway) tryModel(ctx context.Context, cfg config.ModelConfig, req Requ
 	}
 
 	return Result{}, 0, lastErr
+}
+
+func (g *Gateway) tryGenerateModel(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (node.TextGenerationResult, int, error) {
+	provider, ok := g.provider[strings.ToLower(strings.TrimSpace(cfg.Provider))]
+	if !ok {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("unsupported provider %q", cfg.Provider)
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= g.retry.MaxAttempts; attempt++ {
+		timeout := cfg.Timeout
+		if timeout <= 0 {
+			timeout = 5 * time.Second
+		}
+		childCtx, cancel := context.WithTimeout(ctx, timeout)
+		result, status, err := provider.GenerateText(childCtx, cfg, req)
+		cancel()
+		if err == nil {
+			return result, status, nil
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return node.TextGenerationResult{}, status, ctx.Err()
+		case <-time.After(time.Duration(attempt) * g.retry.BaseDelay):
+		}
+	}
+
+	return node.TextGenerationResult{}, 0, lastErr
 }
 
 func validateRequest(req Request) error {
@@ -390,6 +441,27 @@ func (mockFunctionProvider) Invoke(ctx context.Context, cfg config.ModelConfig, 
 	}, 200, nil
 }
 
+func (mockFunctionProvider) GenerateText(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (node.TextGenerationResult, int, error) {
+	_ = ctx
+	_ = cfg
+
+	location := strings.TrimSpace(fmt.Sprint(req.Input["location"]))
+	weather := strings.TrimSpace(fmt.Sprint(req.Input["weather"]))
+	text := strings.TrimSpace(req.UserPrompt)
+	if location != "" && weather != "" {
+		text = fmt.Sprintf("你当前在%s，天气%s。建议带伞，穿一件轻薄外套。", location, weather)
+	}
+
+	return node.TextGenerationResult{
+		Text:     text,
+		Provider: "mock_function",
+		Model:    cfg.Model,
+		Raw: map[string]any{
+			"mode": "mock_text_generation",
+		},
+	}, 200, nil
+}
+
 func mockPlanNodes(ctx RoutingContext) []string {
 	for _, nodeID := range []string{"resolve_user_location", "query_weather", "finalize_weather_answer"} {
 		if candidateNodeExists(ctx.CandidateNodes, nodeID) {
@@ -528,6 +600,49 @@ func (p openAIProvider) Invoke(ctx context.Context, cfg config.ModelConfig, req 
 	return functionCall, resp.StatusCode, nil
 }
 
+func (p openAIProvider) GenerateText(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (node.TextGenerationResult, int, error) {
+	payload, err := buildOpenAITextRequest(ctx, cfg, req)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("marshal openai text request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("create openai text request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if cfg.APIKeyEnv != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+os.Getenv(cfg.APIKeyEnv))
+	}
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("openai text request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return node.TextGenerationResult{}, resp.StatusCode, fmt.Errorf("read openai text response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return node.TextGenerationResult{}, resp.StatusCode, fmt.Errorf("openai-compatible provider returned status %d: %s", resp.StatusCode, string(data))
+	}
+	text, err := parseOpenAITextResponse(data)
+	if err != nil {
+		return node.TextGenerationResult{}, resp.StatusCode, err
+	}
+	return node.TextGenerationResult{
+		Text:     text,
+		Provider: p.kind,
+		Model:    cfg.Model,
+	}, resp.StatusCode, nil
+}
+
 type anthropicProvider struct{}
 
 func (anthropicProvider) Name() string { return "anthropic" }
@@ -570,6 +685,50 @@ func (anthropicProvider) Invoke(ctx context.Context, cfg config.ModelConfig, req
 		return FunctionCall{}, resp.StatusCode, err
 	}
 	return functionCall, resp.StatusCode, nil
+}
+
+func (anthropicProvider) GenerateText(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (node.TextGenerationResult, int, error) {
+	payload, err := buildAnthropicTextRequest(cfg, req)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("marshal anthropic text request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("create anthropic text request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if cfg.APIKeyEnv != "" {
+		httpReq.Header.Set("x-api-key", os.Getenv(cfg.APIKeyEnv))
+	}
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return node.TextGenerationResult{}, 0, fmt.Errorf("anthropic text request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return node.TextGenerationResult{}, resp.StatusCode, fmt.Errorf("read anthropic text response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return node.TextGenerationResult{}, resp.StatusCode, fmt.Errorf("anthropic provider returned status %d: %s", resp.StatusCode, string(data))
+	}
+	text, err := parseAnthropicTextResponse(data)
+	if err != nil {
+		return node.TextGenerationResult{}, resp.StatusCode, err
+	}
+	return node.TextGenerationResult{
+		Text:     text,
+		Provider: "anthropic",
+		Model:    cfg.Model,
+	}, resp.StatusCode, nil
 }
 
 func buildOpenAIRequest(ctx context.Context, cfg config.ModelConfig, req Request) (map[string]any, error) {
@@ -622,6 +781,44 @@ func buildAnthropicRequest(cfg config.ModelConfig, req Request) (map[string]any,
 			},
 		},
 		"tools": buildAnthropicTools(req.Context),
+	}, nil
+}
+
+func buildOpenAITextRequest(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (map[string]any, error) {
+	return map[string]any{
+		"model": cfg.Model,
+		"messages": []map[string]any{
+			{
+				"role":    "system",
+				"content": req.SystemPrompt,
+			},
+			{
+				"role":    "user",
+				"content": req.UserPrompt,
+			},
+		},
+		"metadata": map[string]any{
+			"trace_id": platform.TraceIDFromContext(ctx),
+		},
+	}, nil
+}
+
+func buildAnthropicTextRequest(cfg config.ModelConfig, req node.TextGenerationRequest) (map[string]any, error) {
+	return map[string]any{
+		"model":      cfg.Model,
+		"max_tokens": 1024,
+		"system":     req.SystemPrompt,
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "text",
+						"text": req.UserPrompt,
+					},
+				},
+			},
+		},
 	}, nil
 }
 
@@ -716,6 +913,26 @@ func BuildProviderRegistrationPayload(ctx context.Context, cfg config.ModelConfi
 			"functions":  BuildFunctionDefs(req.Context),
 			"note":       "mock_function provider does not perform outbound API registration",
 			"tool_count": len(BuildFunctionDefs(req.Context)),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported provider %q", cfg.Provider)
+	}
+}
+
+func BuildProviderTextGenerationPayload(ctx context.Context, cfg config.ModelConfig, req node.TextGenerationRequest) (map[string]any, error) {
+	switch providerFamily(normalizeProviderName(cfg.Provider)) {
+	case "openai_compatible":
+		return buildOpenAITextRequest(ctx, cfg, req)
+	case "anthropic":
+		return buildAnthropicTextRequest(cfg, req)
+	case "mock_function":
+		return map[string]any{
+			"provider": "mock_function",
+			"mode":     "in_memory_text_generation",
+			"model":    cfg.Model,
+			"system":   req.SystemPrompt,
+			"user":     req.UserPrompt,
+			"input":    req.Input,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported provider %q", cfg.Provider)
@@ -890,6 +1107,77 @@ func parseAnthropicFunctionCall(data []byte) (FunctionCall, error) {
 		found.Arguments = map[string]any{}
 	}
 	return found, nil
+}
+
+func parseOpenAITextResponse(data []byte) (string, error) {
+	var envelope map[string]any
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return "", err
+	}
+
+	if choices, ok := envelope["choices"].([]any); ok && len(choices) > 0 {
+		if first, ok := choices[0].(map[string]any); ok {
+			if message, ok := first["message"].(map[string]any); ok {
+				if text := strings.TrimSpace(fmt.Sprint(message["content"])); text != "" && text != "<nil>" {
+					return text, nil
+				}
+			}
+		}
+	}
+
+	if output, ok := envelope["output"].([]any); ok {
+		var parts []string
+		for _, item := range output {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if content, ok := entry["content"].([]any); ok {
+				for _, rawPart := range content {
+					part, ok := rawPart.(map[string]any)
+					if !ok {
+						continue
+					}
+					if text := strings.TrimSpace(fmt.Sprint(part["text"])); text != "" && text != "<nil>" {
+						parts = append(parts, text)
+					}
+				}
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n"), nil
+		}
+	}
+
+	return "", errors.New("openai response did not contain text content")
+}
+
+func parseAnthropicTextResponse(data []byte) (string, error) {
+	var envelope map[string]any
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return "", err
+	}
+	content, ok := envelope["content"].([]any)
+	if !ok {
+		return "", errors.New("anthropic response content is missing")
+	}
+	var parts []string
+	for _, item := range content {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(entry["type"])) != "text" {
+			continue
+		}
+		if text := strings.TrimSpace(fmt.Sprint(entry["text"])); text != "" && text != "<nil>" {
+			parts = append(parts, text)
+		}
+	}
+	if len(parts) == 0 {
+		return "", errors.New("anthropic response did not contain text content")
+	}
+	return strings.Join(parts, "\n"), nil
 }
 
 func extractFunctionCall(raw any) (FunctionCall, bool) {

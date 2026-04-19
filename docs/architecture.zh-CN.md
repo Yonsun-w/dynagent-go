@@ -110,6 +110,16 @@ State
 
 ![DynAgent 运行时控制环](./assets/runtime-flow-modern.svg)
 
+## 5.1 AI 决策与数据流转 🧬
+
+![DynAgent AI 决策与数据流](./assets/ai-decision-modern.svg)
+
+## 5.2 趋势图 📈
+
+![DynAgent Runtime 趋势图](./assets/trend-runtime.svg)
+
+![DynAgent AI Signal 趋势图](./assets/trend-ai.svg)
+
 每一轮调度在运行时层面是严格固定的：
 
 1. 读取当前 State

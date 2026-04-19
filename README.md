@@ -2,7 +2,7 @@
 
 > 一个 Go 原生、无预设拓扑、生产级可落地的动态 Agent 运行时内核。
 
-[English](./docs/README.en.md) | [架构说明](./docs/architecture.zh-CN.md) | [设计方案](./docs/design.zh-CN.md) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
+[English](./docs/README.en.md) | [接入指南](./docs/integration.zh-CN.md) | [架构说明](./docs/architecture.zh-CN.md) | [设计方案](./docs/design.zh-CN.md) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
 
 ## 🧩 核心命题
 
@@ -40,6 +40,16 @@ NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Gra
 ## 🔁 控制环
 
 ![DynAgent 现代化运行时控制环](./docs/assets/runtime-flow-modern.svg)
+
+## 🧬 数据流转
+
+![DynAgent AI 决策与数据流](./docs/assets/ai-decision-modern.svg)
+
+## 📈 趋势图
+
+![DynAgent Runtime 趋势图](./docs/assets/trend-runtime.svg)
+
+![DynAgent AI Signal 趋势图](./docs/assets/trend-ai.svg)
 
 ## 🧱 仓库结构
 
@@ -79,6 +89,23 @@ NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Gra
 - Prometheus + OpenTelemetry 可观测性接入
 - 符合 Go 社区习惯的工程结构
 
+## 🛠️ 它现在能干嘛
+
+当前仓库已经能：
+
+- 接收任务并跑完整动态链路
+- 让 AI 选择下一跳节点
+- 在沙箱中执行节点并合并状态 patch
+- 保存步骤、快照、血缘、结构化摘要
+- 提供任务查询、摘要查询、回放、续跑接口
+- 支持内置节点和外部节点两种接入方式
+
+它当前最适合被当成：
+
+- 动态 Agent runtime 内核
+- 你的业务 Agent 底座
+- 一个可审计、可回放、可二开的执行框架
+
 ## ⚡ 快速开始
 
 ```bash
@@ -102,6 +129,7 @@ curl -X POST http://localhost:8080/v1/tasks \
 
 ## 📚 文档入口
 
+- [中文接入指南](./docs/integration.zh-CN.md)
 - [中文架构说明](./docs/architecture.zh-CN.md)
 - [中文设计方案](./docs/design.zh-CN.md)
 - [English README](./docs/README.en.md)

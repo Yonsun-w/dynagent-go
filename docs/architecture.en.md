@@ -1,6 +1,6 @@
-# DynAgent Architecture
+# DynAgent Architecture 🛰️
 
-## 1. Problem Statement
+## 1. Problem Frame
 
 Most agent runtimes collapse orchestration, business flow, and state mutation into one layer. That becomes hard to evolve once you need:
 
@@ -10,65 +10,22 @@ Most agent runtimes collapse orchestration, business flow, and state mutation in
 - runtime hot-loading of business capabilities
 - strict isolation between node logic and scheduler state
 
-DynAgent splits those concerns cleanly.
+DynAgent decomposes those concerns into explicit runtime planes.
 
-## 2. System View
+## 2. System View 🗺️
 
-```mermaid
-flowchart LR
-    subgraph ClientSide[Ingress]
-        C[Client]
-        H[HTTP API]
-    end
+![DynAgent modern architecture diagram](./assets/architecture-modern.svg)
 
-    subgraph Core[Runtime Core]
-        E[Dynamic Routing Engine]
-        A[AI Gateway]
-        RC[Rule Chain]
-        SB[Sandbox]
-        ST[State Bus]
-        ME[Memory Engine]
-        SU[Summary Generator]
-    end
+## 3. Responsibility Boundaries 🔬
 
-    subgraph NodePlane[Node Plane]
-        BN[Builtin Nodes]
-        EN[External Node Runtimes]
-        NR[Node Registry]
-    end
-
-    subgraph DataPlane[Persistence + Telemetry]
-        DB[(Postgres)]
-        RD[(Redis)]
-        OT[OTEL / Metrics / Logs]
-    end
-
-    C --> H --> E
-    E <--> A
-    E <--> RC
-    E <--> ST
-    E <--> SB
-    SB --> BN
-    SB --> EN
-    NR --> BN
-    NR --> EN
-    E <--> ME
-    E --> SU
-    E --> DB
-    E --> RD
-    E --> OT
-```
-
-## 3. Responsibility Boundaries
-
-### HTTP API
+### HTTP API 🌐
 
 - accepts tasks
 - attaches trace metadata
 - returns structured summaries
 - exposes query/resume/replay endpoints
 
-### Dynamic Routing Engine
+### Dynamic Routing Engine ⚙️
 
 - owns task lifecycle
 - executes the main control loop
@@ -76,56 +33,56 @@ flowchart LR
 - merges node patches into the master state
 - enforces max-steps / timeout / loop guards
 
-### AI Gateway
+### AI Gateway 🤖
 
 - abstracts vendor differences
 - normalizes model output
 - applies retry, rate limiting, and circuit breaking
 - supports primary/fallback model routing
 
-### Node Registry
+### Node Registry 🔌
 
 - tracks builtin nodes
 - loads external node manifests
 - attaches runtime clients for hot-loaded node processes
 
-### Sandbox Executor
+### Sandbox Executor 🧪
 
 - isolates node execution
 - enforces per-node timeout
 - prevents panics from escaping to the engine
 - applies concurrency limits
 
-### State Bus
+### State Bus 🧬
 
 - stores the only writable task state
 - exposes readonly deep copies to nodes
 - records decisions and snapshots
 
-### Rule Chain
+### Rule Chain 🛂
 
 - validates node entry conditions
 - rejects illegal transitions with explicit reasons
 - remains pure: state in, decision out
 
-### Memory Engine
+### Memory Engine 🧠
 
 - records trajectories
 - surfaces frequent node patterns
 - recommends candidate nodes for similar tasks
 
-### Persistence
+### Persistence 💾
 
 - stores tasks, steps, snapshots, summaries, lineage
 - keeps short-term runtime cache and memory hints
 
-### Observability
+### Observability 📡
 
 - trace per task
 - metrics per AI call / node execution / task outcome
 - structured logs for debugging and operations
 
-## 4. Data Model
+## 4. Data Model 🗃️
 
 The runtime state is task-scoped and versioned.
 
@@ -150,7 +107,9 @@ Mutation model:
 
 This avoids direct pointer mutation by node code.
 
-## 5. Execution Semantics
+## 5. Execution Semantics 🔁
+
+![DynAgent runtime control loop](./assets/runtime-flow-modern.svg)
 
 Each loop iteration is deterministic at the runtime level:
 
@@ -164,9 +123,9 @@ Each loop iteration is deterministic at the runtime level:
 8. merge patch into master State
 9. persist lineage, snapshot, and summary context
 
-The non-deterministic component is the AI decision. The runtime around it is strict.
+The non-deterministic part is the AI decision. Everything around it is intentionally strict.
 
-## 6. Hot-Load Model
+## 6. Hot-Load Model 🔥
 
 DynAgent does not rely on Go `plugin`.
 
@@ -179,7 +138,7 @@ Instead:
 
 That gives better operational control and isolates node crashes from the scheduler.
 
-## 7. Failure Domains
+## 7. Failure Domains ☄️
 
 ### Node Failure
 
@@ -201,7 +160,7 @@ That gives better operational control and isolates node crashes from the schedul
 - loop detection guard
 - resumable from latest snapshot
 
-## 8. Observability Model
+## 8. Observability Model 📡
 
 Every task should be reconstructable from:
 

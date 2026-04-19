@@ -1,50 +1,41 @@
-# DynAgent
+# DynAgent 🧠
 
-Dynamic, topology-free, production-grade Agent runtime written in Go.
+Go-native dynamic Agent runtime. Not a workflow editor. Not a prompt wrapper. Not a DAG toy.
 
-## What It Is
+## 🎯 Target Shape
 
-DynAgent is not a workflow builder. It is an execution kernel.
+DynAgent is built for systems that need:
 
-It is designed for teams that want:
+- model-selected next hops
+- zero predefined node edges
+- strict state ownership
+- resumable task execution
+- replayable lineage
+- production-grade runtime controls
 
-- model-driven next-hop selection
-- zero hardcoded node edges
-- strict runtime admission control
-- sandboxed node execution
-- resumable task state
-- replayable execution lineage
-- production-grade observability
+## 🧪 Mental Model
 
-## Core Idea
-
-Instead of defining a fixed graph like:
+DynAgent executes an Agent task as a constrained state machine with AI-routed transitions:
 
 ```text
-A -> B -> C -> D
+CurrentState + CandidateNodes + AdmissionPolicy + AIRouter -> NextStep
 ```
 
-DynAgent works like this:
+The runtime graph is materialized during execution, not precompiled in config.
 
-```text
-NodePool + State + Constraints + AI Router = Runtime Graph at Execution Time
-```
+## 🔒 Invariants
 
-The graph is created while the task is running, not before it starts.
+- no LangChain / LangGraph / AutoGPT / Dify / Flowise class dependencies
+- no direct node mutation of master state
+- no hardcoded node-to-node edge graph
+- no uncontrolled node execution outside sandbox
+- no task execution without step/time/loop guards
 
-## Hard Guarantees
+## 🧠 Core Subsystems
 
-- The framework does not use LangChain, LangGraph, AutoGPT, Dify, Flowise, or similar orchestration frameworks.
-- Nodes do not directly mutate the global state.
-- The scheduler validates every AI-selected next hop.
-- Every node runs with timeout and panic recovery.
-- Task execution is bounded by max steps, total timeout, and loop detection.
+### AI Gateway 🤖
 
-## Main Components
-
-### 1. AI Gateway
-
-Normalizes model outputs into:
+Normalizes all model outputs into:
 
 ```json
 {
@@ -54,84 +45,64 @@ Normalizes model outputs into:
 }
 ```
 
-It also provides:
+Built-in concerns:
 
-- retries
+- retry
 - rate limiting
-- circuit breaking
-- fallback model routing
+- circuit breaker
+- fallback routing
 
-### 2. Node Registry
+### Node Plane 🔌
 
-Supports:
+Two execution forms:
 
-- builtin nodes registered in Go
-- external nodes loaded via manifest + gRPC runtime
+- builtin nodes
+- external runtime nodes via manifest + gRPC
 
-### 3. Sandbox Executor
+### Sandbox 🧪
 
-Provides:
+Per-node controls:
 
 - goroutine isolation
-- timeout enforcement
+- timeout
 - panic recovery
-- concurrency pool limits
+- concurrency pool
 
-### 4. State Bus
+### State Bus 🧬
 
-Carries all task-scoped runtime data:
+Carries task-scoped runtime data:
 
-- task metadata
+- metadata
 - user input
 - working memory
 - node outputs
-- AI decision log
+- decision log
 - trace metadata
 - sensitive values
 
-### 5. Dynamic Routing Engine
+### Dynamic Routing Engine ⚙️
 
-The main loop is:
+Main loop:
 
 ```text
-AI decide -> admission check -> sandbox execute -> validate patch -> merge state -> persist -> next round
+decide -> validate -> admit -> sandbox execute -> validate patch -> merge -> persist -> repeat
 ```
 
-### 6. Admission Rule Chain
-
-Rules are declarative and CEL-based.  
-They are evaluated against the current State projection only.
-
-### 7. Graph Memory Engine
+### Memory Engine 🧠
 
 Stores:
 
 - short-term trajectory
-- mid-term frequent execution patterns
-- long-term historical patterns
+- frequent execution patterns
+- historical task patterns
 
-It recommends node candidates to the LLM without imposing execution order.
-
-### 8. Persistence and Summary
-
-Stores:
-
-- tasks
-- execution steps
-- snapshots
-- summaries
-- lineage
-- memory patterns
-
-### 9. Observability
-
-Includes:
+### Observability 📡
 
 - structured logs
 - Prometheus metrics
-- OpenTelemetry tracing hooks
+- OTEL trace hooks
 
-## Runtime Topology
+## 🗺️ Sequence View
 
 ```mermaid
 sequenceDiagram
@@ -145,42 +116,41 @@ sequenceDiagram
     participant Node
     participant Store
 
-    Client->>API: POST /v1/tasks
+    Client->>API: submit task
     API->>Engine: Run(task)
-    Engine->>Memory: Recommend nodes
-    Memory-->>Engine: Candidate node set
-    Engine->>AI: Decide next_node
-    AI-->>Engine: {next_node, reasoning, data}
-    Engine->>Rules: Validate admission
+    Engine->>Memory: recall candidates
+    Memory-->>Engine: node candidates
+    Engine->>AI: decide next_node
+    AI-->>Engine: normalized decision
+    Engine->>Rules: admission check
     Rules-->>Engine: allow / reject
-    Engine->>Sandbox: Execute node
-    Sandbox->>Node: Run with readonly state
-    Node-->>Sandbox: result patch
-    Sandbox-->>Engine: validated result
-    Engine->>Store: save step + snapshot + lineage
+    Engine->>Sandbox: execute node
+    Sandbox->>Node: readonly state
+    Node-->>Sandbox: patch + output
+    Sandbox-->>Engine: result
+    Engine->>Store: save step / snapshot / lineage
     Engine-->>API: structured summary
     API-->>Client: response
 ```
 
-## Quick Start
+## ⚡ Commands
 
 ```bash
-cp ./configs/config.yaml.example ./configs/config.yaml
-go run ./cmd/demo --config ./configs/config.yaml
-go run ./cmd/server --config ./configs/config.yaml
+CGO_ENABLED=0 go test ./...
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
+CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
 
-## Minimal Demo Nodes
+## 🧷 Builtin Demo Nodes
 
 - `intent_parse`
 - `text_transform`
 - `generic_http_call`
 - `finalize`
-- `external_echo` as an external node runtime example
+- `external_echo`
 
-## Repository Notes
+## 📎 Notes
 
-- Default config uses `memory` storage so the project can run locally with minimal setup.
-- Postgres and Redis implementations are already scaffolded for production backend switching.
-- The repository now includes dedicated architecture and design specs in `docs/`.
-- Verified locally with `CGO_ENABLED=0 go test ./...` and `CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml`.
+- default storage backend is `memory`
+- Postgres + Redis backends are scaffolded
+- docs are split into README / architecture / design

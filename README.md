@@ -1,133 +1,94 @@
-# DynAgent
+# DynAgent 🧠⚙️
 
-> Dynamic, topology-free, production-grade Agent runtime for Go.
+> 一个 Go 原生、无预设拓扑、生产级可落地的动态 Agent 运行时内核。
 
-[English](./docs/README.en.md) | [简体中文](./docs/README.zh-CN.md) | [Architecture EN](./docs/architecture.en.md) | [架构说明 CN](./docs/architecture.zh-CN.md) | [Design EN](./docs/design.en.md) | [设计方案 CN](./docs/design.zh-CN.md)
+[English](./docs/README.en.md) | [架构说明](./docs/architecture.zh-CN.md) | [设计方案](./docs/design.zh-CN.md) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
 
-## Why
+## 🧩 核心命题
 
-Most "Agent frameworks" hardcode orchestration semantics somewhere:
+很多所谓的 Agent 框架，本质上把编排策略偷偷写死在框架内部：
 
-- fixed DAGs
-- implicit state mutation
-- hidden execution graphs
-- framework-owned control flow
+- 固定 DAG 边
+- 隐式状态修改
+- 隐藏控制流
+- 框架内耦合业务执行语义
 
-`DynAgent` takes the opposite path:
+`DynAgent` 不这么做。
 
-- no predefined edges
-- no baked-in business flow
-- no node-side global state mutation
-- no third-party agent orchestration framework
-
-This repository is a Go-native execution kernel for dynamic Agents where the LLM chooses the next node and the runtime only enforces safety, validation, isolation, persistence, and observability.
-
-## Design Axioms
-
-- **Topology-free execution**: the runtime exposes a node pool, not a workflow graph.
-- **LLM decides, runtime constrains**: AI picks `next_node`; the engine validates admission and system limits.
-- **State is append/merge only**: nodes never mutate the master state directly.
-- **Sandbox first**: each node runs behind timeout, panic recovery, and concurrency controls.
-- **Trace everything**: every task, AI decision, node result, snapshot, and summary is replayable.
-
-## Architecture Snapshot
-
-```mermaid
-flowchart TD
-    U[User / API Client]
-    G[HTTP API Layer]
-    E[Dynamic Routing Engine]
-    AI[AI Gateway]
-    R[Admission Rule Chain]
-    S[Sandbox Executor]
-    N1[Builtin Nodes]
-    N2[External Node Runtimes]
-    ST[Global State Bus]
-    M[Graph Memory Engine]
-    P[Persistence Layer]
-    O[Observability]
-
-    U --> G
-    G --> E
-    E --> AI
-    AI --> E
-    E --> R
-    R --> E
-    E --> S
-    S --> N1
-    S --> N2
-    N1 --> E
-    N2 --> E
-    E --> ST
-    ST --> E
-    E --> M
-    M --> E
-    E --> P
-    E --> O
-```
-
-## Execution Loop
+DynAgent 把 Agent 执行建模成一个“受约束的运行时问题”：
 
 ```text
-for task_not_terminated:
-  1. load current State snapshot
-  2. recall recommended nodes from memory
-  3. ask AI for {next_node, reasoning, data}
-  4. validate node existence + admission rules
-  5. execute node in sandbox
-  6. validate result patch
-  7. merge patch into master State
-  8. persist lineage + snapshot + trace
-  9. check terminate / timeout / loop guard
+NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Graph
 ```
 
-## Repository Layout
+没有预定义边。  
+没有节点侧全局状态所有权。  
+没有第三方 Agent 编排框架依赖。
+
+## 🚀 运行时公理
+
+- **Topology-free**：运行时暴露的是节点集合，而不是固定流程图。
+- **LLM-routed**：模型选择 `next_node`，引擎负责校验与约束。
+- **Scheduler-owned state**：节点只能产出 patch，只有调度器能合并。
+- **Isolation-first**：节点执行天然运行在 timeout / recover / concurrency guard 后面。
+- **Replayability-first**：决策、快照、血缘、摘要全部可追溯。
+
+## 🗺️ 架构图
+
+![DynAgent 现代化架构图](./docs/assets/architecture-modern.svg)
+
+## 🔁 控制环
+
+![DynAgent 现代化运行时控制环](./docs/assets/runtime-flow-modern.svg)
+
+## 🧱 仓库结构
 
 ```text
 .
-├── api/http                  # REST handlers
-├── cmd/server                # main HTTP service
-├── cmd/demo                  # minimal runnable demo
-├── cmd/node-runner           # external node runtime process
-├── configs                   # app config + dynamic node manifests
-├── docs                      # multi-language docs and architecture docs
+├── api/http                  # REST 接口入口
+├── cmd/server                # 主运行时服务
+├── cmd/demo                  # 最小可运行 demo
+├── cmd/node-runner           # 外部节点运行时进程
+├── configs                   # 主配置 + 动态节点 manifest
+├── docs                      # 中英文文档、架构、设计、SVG 图
 ├── internal
-│   ├── ai                    # unified AI gateway
-│   ├── engine                # dynamic routing scheduler
-│   ├── node                  # node contract + registry + manifest loader
-│   ├── sandbox               # isolation, timeout, panic recovery
-│   ├── state                 # state bus, snapshots, safe merge
-│   ├── rules                 # CEL-based admission chain
-│   ├── memory                # graph memory and node recommendation
-│   ├── persistence           # memory / postgres / redis-backed storage
-│   ├── summary               # structured task summary
-│   └── observe               # metrics, logs, tracing
-├── migrations/postgres       # relational schema
-├── pkg/contracts             # runtime contracts for external nodes
-├── plugins/builtin           # built-in generic nodes
-└── proto                     # runtime protocol definition
+│   ├── ai                    # AI 网关：适配、重试、限流、熔断、降级
+│   ├── engine                # 动态调度核心
+│   ├── node                  # 节点接口、注册中心、热加载
+│   ├── sandbox               # 沙箱隔离、超时、panic recover、并发池
+│   ├── state                 # 状态总线、快照、安全合并
+│   ├── rules                 # CEL 准入规则链
+│   ├── memory                # 图记忆与候选节点召回
+│   ├── persistence           # memory/postgres/redis 存储实现
+│   ├── summary               # 结构化链路摘要
+│   └── observe               # 日志、指标、Trace
+├── migrations/postgres       # 关系型 schema
+├── pkg/contracts             # 外部节点运行时契约
+├── plugins/builtin           # 内置通用节点
+└── proto                     # Runtime 协议定义
 ```
 
-## Features
+## ✨ 关键性质
 
-- Unified AI gateway with normalized decision payloads
-- Builtin node system and external hot-loadable node runtimes
-- CEL-based declarative admission rules
-- Immutable node input via deep-copied read-only state
-- Incremental snapshots and replayable execution lineage
-- Short/mid/long memory model with node recommendation
-- Structured summary generation and resume support
-- Prometheus metrics + OTEL trace plumbing
+- 统一 AI 决策契约：`{next_node, reasoning, data}`
+- 内置节点 + 外部节点双平面
+- 基于 CEL 的声明式准入校验
+- 节点只拿只读状态副本
+- 增量快照与可回放执行血缘
+- 支持从最近快照断点续跑
+- Prometheus + OpenTelemetry 可观测性接入
+- 符合 Go 社区习惯的工程结构
 
-## Quick Start
+## ⚡ 快速开始
 
 ```bash
 cp ./configs/config.yaml.example ./configs/config.yaml
 docker compose up -d postgres redis
-go run ./cmd/server --config ./configs/config.yaml
+CGO_ENABLED=0 go test ./...
+CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
 
-Create a task:
+提交任务：
 
 ```bash
 curl -X POST http://localhost:8080/v1/tasks \
@@ -139,18 +100,26 @@ curl -X POST http://localhost:8080/v1/tasks \
   }'
 ```
 
-## Open Source Docs
+## 📚 文档入口
 
-- [English README](./docs/README.en.md)
-- [中文 README](./docs/README.zh-CN.md)
-- [English Architecture Guide](./docs/architecture.en.md)
 - [中文架构说明](./docs/architecture.zh-CN.md)
-- [English Design Spec](./docs/design.en.md)
 - [中文设计方案](./docs/design.zh-CN.md)
+- [English README](./docs/README.en.md)
+- [English Architecture Guide](./docs/architecture.en.md)
+- [English Design Spec](./docs/design.en.md)
 - [Contributing Guide](./CONTRIBUTING.md)
 - [License](./LICENSE)
 
-## Status
+## ✅ 当前验证
 
-The repository is scaffolded as a production-oriented open source project.  
-The project has been verified with `go mod tidy`, `CGO_ENABLED=0 go test ./...`, and `CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml`.
+已完成：
+
+```bash
+go mod tidy
+CGO_ENABLED=0 go test ./...
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
+```
+
+## 🛰️ GitHub
+
+仓库：`Yonsun-w/dynagent-go`

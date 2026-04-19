@@ -1,6 +1,6 @@
-# DynAgent Design Specification
+# DynAgent Design Specification 🧠⚙️
 
-## 1. Design Goals
+## 1. Design Goals 🎯
 
 DynAgent is designed for a narrow but demanding target:
 
@@ -11,7 +11,7 @@ DynAgent is designed for a narrow but demanding target:
 
 This document focuses on design decisions, tradeoffs, and internal runtime mechanics.
 
-## 2. Non-Goals
+## 2. Non-Goals ⛔
 
 DynAgent intentionally does not try to be:
 
@@ -20,29 +20,29 @@ DynAgent intentionally does not try to be:
 - a business-specific copilot framework
 - a generic plugin marketplace runtime with arbitrary in-process code loading
 
-## 3. Design Principles
+## 3. Design Principles 🧭
 
-### Runtime over DSL
+### Runtime over DSL 📐
 
 The framework exposes runtime contracts instead of inventing a new orchestration DSL.
 
-### AI chooses, runtime verifies
+### AI chooses, runtime verifies 🤖
 
 The model can choose any node. The runtime decides whether that choice is admissible and executable.
 
-### Immutable node inputs
+### Immutable node inputs 🧬
 
 Nodes receive a deep-copied readonly view of state.
 
-### Patches, not mutation
+### Patches, not mutation 🩹
 
 Nodes emit `Patch`; only the engine merges it.
 
-### Hot-load operationally, not magically
+### Hot-load operationally, not magically 🔥
 
 External nodes are separate processes, registered through manifests and called over gRPC.
 
-## 4. Component Design
+## 4. Component Design 🧱
 
 ### 4.1 AI Gateway
 
@@ -112,9 +112,9 @@ Persistence is split by access pattern:
 - cache / short-term memory in Redis
 - cold storage abstraction for future object storage support
 
-## 5. Core Runtime Flows
+## 5. Core Runtime Flows 🔁
 
-### Task Execution
+### Task Execution 🚀
 
 ```mermaid
 flowchart TD
@@ -134,7 +134,7 @@ flowchart TD
     K -- Yes --> L[Generate Summary]
 ```
 
-### External Node Hot-Load
+### External Node Hot-Load 🔌
 
 ```mermaid
 flowchart LR
@@ -147,7 +147,7 @@ flowchart LR
     H --> G[Register Runtime Client]
 ```
 
-### Snapshot Lifecycle
+### Snapshot Lifecycle 📸
 
 ```mermaid
 sequenceDiagram
@@ -164,7 +164,7 @@ sequenceDiagram
     Engine->>Store: Save snapshot
 ```
 
-## 6. Failure Strategy
+## 6. Failure Strategy ☄️
 
 ### Node Failure Modes
 
@@ -205,7 +205,7 @@ Mitigations:
 - max-step limit
 - task deadline
 
-## 7. Why This Shape
+## 7. Why This Shape 🧠
 
 DynAgent is intentionally opinionated:
 

@@ -1,188 +1,118 @@
 # DynAgent 🧠⚙️
 
-> 一个 Go 原生、无预设拓扑、生产级可落地的动态 Agent 运行时内核。
+> 一个 Go 原生、无预设拓扑、Function Calling-only 的动态 Agent 运行时内核。
 
 [English](#english) | [接入指南](./docs/integration.zh-CN.md) | [架构说明](./docs/architecture.zh-CN.md) | [设计方案](./docs/design.zh-CN.md) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
 
-## 🧩 核心命题
+## 先用一句话说清楚
 
-很多所谓的 Agent 框架，本质上把编排策略偷偷写死在框架内部：
+DynAgent 不是工作流搭建器，也不是固定 DAG 的编排框架。
 
-- 固定 DAG 边
-- 隐式状态修改
-- 隐藏控制流
-- 框架内耦合业务执行语义
+它做的事很简单：
 
-`DynAgent` 不这么做。
+- 把一组可执行节点注册进运行时
+- 把当前任务状态和候选节点交给大模型
+- 让模型通过 **Function Calling** 选择下一跳
+- 由 Runtime 负责准入校验、沙箱执行、状态合并、持久化和回放
 
-DynAgent 把 Agent 执行建模成一个“受约束的运行时问题”：
+如果你想做的是“**让 LLM 决定下一步该调用哪个能力，但执行和状态必须由框架兜底**”，这个项目就是干这个的。
 
-```text
-NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Graph
-```
+## 它能解决什么问题
 
-没有预定义边。  
-没有节点侧全局状态所有权。  
-没有第三方 Agent 编排框架依赖。
+很多 Agent 项目在这几个地方会失控：
 
-## 🚀 运行时公理
+- 节点跳转关系写死，越改越像流程图
+- 节点随手改全局状态，最后很难排查问题
+- LLM 输出不稳定，协议一变就炸
+- 线上跑起来后，看不到完整执行轨迹
 
-- **Topology-free**：运行时暴露的是节点集合，而不是固定流程图。
-- **LLM-routed**：模型选择 `next_node`，引擎负责校验与约束。
-- **Scheduler-owned state**：节点只能产出 patch，只有调度器能合并。
-- **Isolation-first**：节点执行天然运行在 timeout / recover / concurrency guard 后面。
-- **Replayability-first**：决策、快照、血缘、摘要全部可追溯。
+DynAgent 的做法是：
 
-## 🧠 路由协议
+- **没有预设边**：节点之间不写死跳转关系
+- **只有调度器能改主状态**：节点只返回 `Patch`
+- **只接受 Function Calling**：不吃自由文本决策
+- **每一步都可追踪**：决策、快照、摘要、血缘都能落库
+- **每个节点都进沙箱**：超时、panic recover、并发限制默认开启
 
-DynAgent 的智能路由是 **Function Calling-only**，不接受自由文本决策，也不兼容历史 JSON 猜测链路：
+## 现在仓库里已经有什么
 
-```text
-route_next_node(
-  next_node: string,
-  reasoning: string,
-  data: object
-)
-```
+当前仓库已经不是空架子，已经有这些能力：
 
-- `next_node`：目标节点标识，或 `__terminate__`
-- `reasoning`：简短、可追溯的路由理由
-- `data`：结构化上下文，例如候选节点命中原因、路由参数
+- 动态调度引擎
+- AI Gateway
+- 节点注册中心
+- Goroutine 沙箱执行器
+- 全局 State + Patch 合并
+- 快照、步骤、摘要、回放、续跑
+- HTTP 服务入口
+- 一个可直接跑通的天气 Agent demo
 
-如果业务需要“先规划、后执行”，可以显式启用第二个函数：
+## 5 分钟跑通
 
-```text
-propose_dag(
-  goal: string,
-  nodes: string[],
-  edges: {from,to}[],
-  reasoning: string,
-  data: object
-)
-```
-
-`propose_dag(...)` 只负责产出规划痕迹；真正执行仍然坚持**单步决策、单步校验、单步执行**。
-
-## 🗺️ 架构图
-
-![DynAgent 现代化架构图](./docs/assets/architecture-modern-zh.svg)
-
-## 🔁 控制环
-
-![DynAgent 现代化运行时控制环](./docs/assets/runtime-flow-modern-zh.svg)
-
-## 🧬 数据流转
-
-![DynAgent AI 决策与数据流](./docs/assets/ai-decision-modern-zh.svg)
-
-## 🗺️ 时序视图
-
-![DynAgent 时序视图](./docs/assets/sequence-view-modern-zh.svg)
-
-## 🆚 设计差异
-
-| 维度 | DynAgent | Claude Code | LangGraph |
-| --- | --- | --- | --- |
-| 核心范式 | 受约束的动态 Agent Runtime | 面向编码任务的 Agentic IDE / CLI 助手 | 显式图编排框架 |
-| 控制权分布 | LLM 选节点，Runtime 做准入、合并、持久化 | 模型主导工具使用，围绕代码工作流协作 | 开发者预定义图结构与状态流 |
-| 拓扑假设 | 无预设边，运行时生成执行轨迹 | 通常围绕任务上下文动态决策，不强调通用节点图 | 天然依赖节点边与图结构定义 |
-| 状态所有权 | 调度器独占主 State，节点只回 Patch | 以会话 / 工作区上下文为中心 | 图状态通常由框架图执行器传递 |
-| 第一目标 | 通用、可审计、可回放的执行内核 | 提升编码生产力 | 构建可控的图式 Agent 工作流 |
-| 设计立场 | Runtime over Workflow DSL | Coding Agent over Runtime Kernel | Graph over Runtime Freedom |
-
-
-## 🧱 仓库结构
-
-```text
-.
-├── api/http                  # REST 接口入口
-├── cmd/server                # 主运行时服务
-├── cmd/demo                  # 最小可运行 demo
-├── cmd/node-runner           # 外部节点运行时进程
-├── configs                   # 主配置 + 动态节点 manifest
-├── docs                      # 中英文文档、架构、设计、SVG 图
-├── internal
-│   ├── ai                    # AI 网关：适配、重试、限流、熔断、降级
-│   ├── engine                # 动态调度核心
-│   ├── node                  # 节点接口、注册中心、热加载
-│   ├── sandbox               # 沙箱隔离、超时、panic recover、并发池
-│   ├── state                 # 状态总线、快照、安全合并
-│   ├── rules                 # CEL 准入规则链
-│   ├── memory                # 图记忆与候选节点召回
-│   ├── persistence           # memory/postgres/redis 存储实现
-│   ├── summary               # 结构化链路摘要
-│   └── observe               # 日志、指标、Trace
-├── migrations/postgres       # 关系型 schema
-├── pkg/contracts             # 外部节点运行时契约
-├── plugins/builtin           # 内置通用节点
-└── proto                     # Runtime 协议定义
-```
-
-## ✨ 关键性质
-
-- 固定路由函数契约：`route_next_node(next_node, reasoning, data)`
-- 内置节点 + 外部节点双平面
-- 基于 CEL 的声明式准入校验
-- 节点只拿只读状态副本
-- 增量快照与可回放执行血缘
-- 支持从最近快照断点续跑
-- Prometheus + OpenTelemetry 可观测性接入
-- 符合 Go 社区习惯的工程结构
-
-## 🛠️ 它现在能干嘛
-
-当前仓库已经能：
-
-- 接收任务并跑完整动态链路
-- 让 AI 通过 `route_next_node(...)` 选择下一跳节点
-- 在启用规划模式时，通过 `propose_dag(...)` 记录 DAG 规划痕迹
-- 在沙箱中执行节点并合并状态 patch
-- 保存步骤、快照、血缘、结构化摘要
-- 提供任务查询、摘要查询、回放、续跑接口
-- 支持内置节点和外部节点两种接入方式
-
-它当前最适合被当成：
-
-- 动态 Agent runtime 内核
-- 你的业务 Agent 底座
-- 一个可审计、可回放、可二开的执行框架
-
-## ⚡ 快速开始
+### 1. 本地直接跑 mock demo
 
 ```bash
-cp ./configs/config.yaml.example ./configs/config.yaml
-docker compose up -d postgres redis
+source ~/.gvm/scripts/gvm && gvm use go1.22.12 >/dev/null
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
-```
-
-运行框架内天气 demo：
-
-```bash
 CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
   --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞'
 ```
 
-接入真实 LLM API 后，推荐这样跑：
+这会跑一个完整天气链路：
+
+1. `resolve_user_location`
+2. `query_weather`
+3. `finalize_weather_answer`
+4. `__terminate__`
+
+### 2. 接真实 LLM API 跑
+
+把配置改成真实 provider，例如：
+
+```yaml
+ai:
+  routing_mode: route_and_plan
+  primary:
+    provider: openai # 也支持 qwen / kimi / glm
+    endpoint: "https://your-provider-endpoint"
+    model: "your-model"
+    api_key_env: "LLM_API_KEY"
+    timeout: 10s
+  fallback:
+    provider: mock_function
+    endpoint: ""
+    model: "mock-function-fallback"
+    api_key_env: ""
+    timeout: 5s
+```
+
+然后运行：
 
 ```bash
 export LLM_API_KEY="your-api-key"
 
+source ~/.gvm/scripts/gvm && gvm use go1.22.12 >/dev/null
 CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
   --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞' \
   --verbose
 ```
 
-这个 demo 现在默认会完整穿过这条链路：
+如果配置不完整，demo 会在启动前直接报错，不会等到运行过程中再给你一个模糊的 provider 错误。
+
+## 这个 demo 到底演示了什么
+
+当前 `cmd/demo` 不是“打印几段假 JSON”，而是走框架真实主链路：
 
 1. 注册 3 个自定义天气节点
-2. 把候选节点和只读状态组装成 `routing_context`
-3. 通过 function calling 注册 `route_next_node(...)` / `propose_dag(...)`
-4. 让 LLM 只返回函数调用，不直接执行业务逻辑
-5. Runtime 校验准入规则并在沙箱内执行节点
-6. 合并 patch、生成轨迹、输出结构化摘要
+2. 构造任务 State
+3. 生成候选节点列表和 `routing_context`
+4. 把 `route_next_node(...)` / `propose_dag(...)` 注册给模型
+5. 由 LLM 通过 function calling 决定下一跳
+6. Runtime 做准入校验和沙箱执行
+7. 节点返回 `Patch`
+8. 调度器合并状态、记录快照、产出结构化摘要
 
-如果你已经接入了真实模型，默认输出会直接展示：
+默认输出会包含：
 
 - `provider_info`
 - `registered_nodes`
@@ -192,90 +122,34 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
 - `node_outputs`
 - `final_summary`
 
-加上 `--verbose` 会额外输出：
+加上 `--verbose` 后，会再看到：
 
 - `routing_context`
-- `openai_tools`
-- `anthropic_tools`
 - `runtime_state`
+- `anthropic_tools`
+- 更完整的调试信息
 
-提交任务：
+## 最重要的设计约束
 
-```bash
-curl -X POST http://localhost:8080/v1/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Summarize this framework execution path.",
-    "keywords": ["summarize", "framework", "execution"],
-    "labels": {"source": "readme"}
-  }'
-```
+这个项目最核心的约束只有 4 条：
 
-## 📚 文档入口
+1. **没有预设拓扑**  
+   Runtime 只暴露节点池，不定义固定边。
 
-- [中文接入指南](./docs/integration.zh-CN.md)
-- [中文架构说明](./docs/architecture.zh-CN.md)
-- [中文设计方案](./docs/design.zh-CN.md)
-- [English README](./docs/README.en.md)
-- [English Architecture Guide](./docs/architecture.en.md)
-- [English Design Spec](./docs/design.en.md)
-- [Contributing Guide](./CONTRIBUTING.md)
-- [License](./LICENSE)
+2. **只有调度器能改主状态**  
+   节点只能读取 `ReadOnlyState`，并返回 `Patch`。
 
-## ✅ 当前验证
+3. **LLM 决策必须走 Function Calling**  
+   不兼容自由文本路由，也不兼容历史 JSON 猜测模式。
 
-已完成：
+4. **执行必须有运行时保护**  
+   超时、熔断、限流、fallback、panic recover、最大步数、循环检测都要有。
 
-```bash
-go mod tidy
-CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞'
-```
+## Function Calling 协议
 
-## 🛰️ GitHub
+DynAgent 默认使用两个函数。
 
-仓库：`Yonsun-w/dynagent-go`
-
----
-
-## English
-
-> A Go-native, topology-free, production-grade runtime kernel for dynamic Agents.
-
-[中文](#dynagent-️) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
-
-### 🧩 Thesis
-
-Many so-called Agent frameworks secretly hardcode orchestration semantics:
-
-- fixed DAG edges
-- implicit state mutation
-- hidden control flow
-- framework-coupled execution logic
-
-`DynAgent` does not.
-
-DynAgent models Agent execution as a constrained runtime problem:
-
-```text
-NodePool + StateBus + AdmissionRules + AIRouter + Sandbox + Memory = Runtime Graph
-```
-
-No predefined edges.  
-No node-owned global state mutation.  
-No third-party orchestration framework dependency.
-
-### 🚀 Runtime Axioms
-
-- **Topology-free**: the runtime exposes a node set, not a fixed workflow.
-- **LLM-routed**: the model selects `next_node`; the engine validates and constrains.
-- **Scheduler-owned state**: nodes emit patches; only the engine merges them.
-- **Isolation-first**: node execution is always wrapped by timeout, recover, and concurrency guards.
-- **Replayability-first**: decisions, snapshots, lineage, and summaries are persisted.
-
-### 🧠 Routing Contract
-
-DynAgent is **Function Calling-only** for routing. It does not accept free-form text decisions and does not keep legacy JSON guessing paths:
+### 路由函数
 
 ```text
 route_next_node(
@@ -285,11 +159,11 @@ route_next_node(
 )
 ```
 
-- `next_node`: target node id or `__terminate__`
-- `reasoning`: short audit-friendly explanation
-- `data`: structured routing metadata
+- `next_node`：下一跳节点 ID，或 `__terminate__`
+- `reasoning`：本次路由的解释
+- `data`：结构化补充信息
 
-If a product needs planning-first behavior, it can enable a second function such as:
+### 可选规划函数
 
 ```text
 propose_dag(
@@ -301,123 +175,187 @@ propose_dag(
 )
 ```
 
-`propose_dag(...)` records a plan only. The runtime still executes one validated hop at a time.
+`propose_dag(...)` 只负责留下规划痕迹。真正执行仍然坚持“**一次一步**”。
 
-### 🗺️ Architecture
+## 二次开发怎么接
 
-![DynAgent modern architecture diagram](./docs/assets/architecture-modern.svg)
+最短路径就是两步。
 
-### 🔁 Control Loop
+### 1. 写你的节点
 
-![DynAgent modern runtime control loop](./docs/assets/runtime-flow-modern.svg)
+你只需要实现这个接口：
 
-### 🧬 Data Flow
+```go
+type Node interface {
+    Meta() Meta
+    CheckBefore(ctx context.Context, st *state.ReadOnlyState) CheckResult
+    Execute(ctx context.Context, st *state.ReadOnlyState) Result
+}
+```
 
-![DynAgent AI decision and data flow](./docs/assets/ai-decision-modern.svg)
+节点开发时记住两件事：
 
-### 🗺️ Sequence View
+- 不要直接改主 State
+- 只通过 `Result.Patch` 回写结果
 
-![DynAgent sequence view](./docs/assets/sequence-view-modern.svg)
+天气 demo 里的节点实现可以直接拿来当模板：
 
-### 🆚 Design Delta
+- `resolve_user_location`
+- `query_weather`
+- `finalize_weather_answer`
 
-| Dimension | DynAgent | Claude Code | LangGraph |
+### 2. 注册你的节点
+
+```go
+if err := app.Registry.RegisterBuiltin(yourNode{}); err != nil {
+    panic(err)
+}
+```
+
+之后 Runtime 会自动把这些节点放进候选池，让 LLM 决定下一跳。
+
+## 架构图
+
+### 总览
+
+![DynAgent 现代化架构图](./docs/assets/architecture-modern-zh.svg)
+
+### 控制环
+
+![DynAgent 现代化运行时控制环](./docs/assets/runtime-flow-modern-zh.svg)
+
+### 数据流转
+
+![DynAgent AI 决策与数据流](./docs/assets/ai-decision-modern-zh.svg)
+
+### 时序图
+
+![DynAgent 时序视图](./docs/assets/sequence-view-modern-zh.svg)
+
+## 和 Claude Code / LangGraph 的差异
+
+| 维度 | DynAgent | Claude Code | LangGraph |
 | --- | --- | --- | --- |
-| Core model | constrained dynamic Agent runtime | agentic IDE / CLI for coding tasks | explicit graph orchestration framework |
-| Control ownership | LLM selects nodes, runtime owns admission and state merge | model-centric tool use around coding workflows | developer-defined graph drives transitions |
-| Topology assumption | no predefined edges | dynamic task flow, not a general runtime graph kernel | graph structure is a first-class primitive |
-| State ownership | scheduler owns master state; nodes emit patches | session / workspace oriented context | state is usually propagated by the graph executor |
-| Primary target | auditable and replayable execution kernel | coding productivity | controllable graph-based Agent workflows |
-| Design stance | Runtime over Workflow DSL | Coding Agent over Runtime Kernel | Graph over Runtime Freedom |
+| 核心目标 | 通用动态 Agent Runtime | 编码场景 Agent 助手 | 图式 Agent 编排 |
+| 拓扑 | 无预设边 | 动态任务流 | 显式图结构 |
+| 状态所有权 | 调度器独占主 State | 会话 / 工作区中心 | 图执行器传递状态 |
+| 决策协议 | Function Calling 选节点 | 工具使用偏编码场景 | 开发者定义图转移 |
 
-### 🧱 Repository Layout
+## 仓库结构
 
 ```text
 .
-├── api/http                  # REST entrypoints
-├── cmd/server                # runtime service
-├── cmd/demo                  # minimal runnable demo
-├── cmd/node-runner           # external node runtime process
-├── configs                   # app config + node manifests
-├── docs                      # EN/CN docs, architecture, design, SVG diagrams
-├── internal
-│   ├── ai                    # AI gateway
-│   ├── engine                # dynamic scheduler
-│   ├── node                  # node contract + registry + hot-load
-│   ├── sandbox               # isolation + timeout + recover + pool
-│   ├── state                 # state bus + snapshots + safe merge
-│   ├── rules                 # CEL admission chain
-│   ├── memory                # graph memory + node recommendation
-│   ├── persistence           # memory/postgres/redis backends
-│   ├── summary               # structured task summary
-│   └── observe               # logs + metrics + tracing
-├── migrations/postgres
-├── pkg/contracts
-├── plugins/builtin
-└── proto
+├── cmd/server                # HTTP 服务入口
+├── cmd/demo                  # 天气 Agent demo
+├── configs                   # 配置与动态节点 manifest
+├── docs                      # 中英文文档与架构图
+├── internal/ai              # AI Gateway 与 provider 适配
+├── internal/engine          # 动态调度核心
+├── internal/node            # 节点接口与注册中心
+├── internal/sandbox         # 节点沙箱
+├── internal/state           # State 与 Patch
+├── internal/persistence     # 存储实现
+└── examples/weatherdemo     # 示例：天气 Agent
 ```
 
-### ✨ Properties
+## 文档入口
 
-- Fixed routing function contract: `route_next_node(next_node, reasoning, data)`
-- Builtin and external node planes
-- Declarative admission checks via CEL
-- Readonly state snapshots for every node
-- Incremental snapshots and replayable lineage
-- Resume from latest durable snapshot
-- Prometheus + OpenTelemetry ready
-- Production-oriented Go project layout
+- [中文接入指南](./docs/integration.zh-CN.md)
+- [中文架构说明](./docs/architecture.zh-CN.md)
+- [中文设计方案](./docs/design.zh-CN.md)
+- [English README](./docs/README.en.md)
+- [English Architecture Guide](./docs/architecture.en.md)
+- [English Design Spec](./docs/design.en.md)
 
-### 🛠️ What It Can Do Now
-
-The current repository can already:
-
-- accept a task and execute a full dynamic chain
-- let AI select the next node through `route_next_node(...)`
-- record DAG planning traces through `propose_dag(...)` when planning mode is enabled
-- execute nodes in a sandbox and merge state patches
-- persist steps, snapshots, lineage, and summaries
-- provide query, replay, and resume APIs
-- support both builtin nodes and external node runtimes
-
-It is best used today as:
-
-- a dynamic Agent runtime kernel
-- a foundation for your own business Agents
-- an auditable, replayable, extensible execution framework
-
-### ⚡ Quick Start
+## 当前验证
 
 ```bash
-cp ./configs/config.yaml.example ./configs/config.yaml
-docker compose up -d postgres redis
+source ~/.gvm/scripts/gvm && gvm use go1.22.12 >/dev/null
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
-```
-
-Run the framework-native weather demo:
-
-```bash
 CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
   --prompt '帮我查一下我当前位置的天气，并告诉我要不要带伞'
 ```
 
-Submit a task:
+## English
+
+> A Go-native, topology-free, function-calling-only runtime kernel for dynamic Agents.
+
+[中文](#dynagent-️) | [Architecture EN](./docs/architecture.en.md) | [Design EN](./docs/design.en.md)
+
+### What It Is
+
+DynAgent is not a workflow builder and not a fixed DAG orchestrator.
+
+It does one thing:
+
+- register executable nodes
+- send current state + candidate nodes to the model
+- let the model choose the next node via function calling
+- let the runtime own validation, sandbox execution, state merge, persistence, and replay
+
+### What You Can Run Right Now
+
+The repository already includes:
+
+- a dynamic scheduler
+- an AI gateway
+- node registry
+- sandbox executor
+- state bus + patch merge
+- replay / resume / summary pipeline
+- a runnable weather agent demo
+
+### Quick Start
 
 ```bash
-curl -X POST http://localhost:8080/v1/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Summarize this framework execution path.",
-    "keywords": ["summarize", "framework", "execution"],
-    "labels": {"source": "readme"}
-  }'
+source ~/.gvm/scripts/gvm && gvm use go1.22.12 >/dev/null
+CGO_ENABLED=0 go test ./...
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt 'Check the weather for my current location and tell me whether I should bring an umbrella'
 ```
 
-### 📚 Docs
+To run with a real model API:
 
-- [Integration Guide CN](./docs/integration.zh-CN.md)
+```bash
+export LLM_API_KEY="your-api-key"
+
+source ~/.gvm/scripts/gvm && gvm use go1.22.12 >/dev/null
+CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml \
+  --prompt 'Check the weather for my current location and tell me whether I should bring an umbrella' \
+  --verbose
+```
+
+### Runtime Contract
+
+DynAgent uses function calling only:
+
+```text
+route_next_node(next_node, reasoning, data)
+propose_dag(goal, nodes, edges, reasoning, data)
+```
+
+### Extension Path
+
+Implement a node:
+
+```go
+type Node interface {
+    Meta() Meta
+    CheckBefore(ctx context.Context, st *state.ReadOnlyState) CheckResult
+    Execute(ctx context.Context, st *state.ReadOnlyState) Result
+}
+```
+
+Then register it:
+
+```go
+if err := app.Registry.RegisterBuiltin(yourNode{}); err != nil {
+    panic(err)
+}
+```
+
+### Docs
+
+- [Integration Guide](./docs/integration.zh-CN.md)
 - [Architecture EN](./docs/architecture.en.md)
 - [Design EN](./docs/design.en.md)
-- [Contributing Guide](./CONTRIBUTING.md)
-- [License](./LICENSE)

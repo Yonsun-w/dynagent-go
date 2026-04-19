@@ -66,8 +66,8 @@
   <path d="M250 240H286M464 240H500M678 240H714M892 240H928M1106 240H1142M1320 240H1356" stroke="#60A5FA" stroke-width="4" stroke-linecap="round"/>
 
   <circle cx="800" cy="450" r="68" fill="#172036" stroke="#315CAB" stroke-width="2"/>
-  <text x="758" y="442" class="step">保护</text>
-  <text x="720" y="468" class="meta">循环 / 步数 / 超时</text>
+  <text x="800" y="442" class="step" text-anchor="middle">保护节点</text>
+  <text x="800" y="468" class="meta" text-anchor="middle">循环 / 步数 / 超时</text>
 
   <path d="M1444 298V364H800V382" stroke="#60A5FA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M800 518V586H160V298" stroke="#60A5FA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.78"/>

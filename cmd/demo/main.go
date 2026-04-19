@@ -4,9 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/admin/ai_project/internal/config"
-	"github.com/admin/ai_project/internal/demo/weatherdemo"
 	"os"
+
+	"github.com/admin/ai_project/examples/weatherdemo"
+	"github.com/admin/ai_project/internal/config"
 )
 
 func main() {

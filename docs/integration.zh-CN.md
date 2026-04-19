@@ -300,7 +300,7 @@ type Node interface {
 - `query_weather`
 - `finalize_weather_answer`
 
-你可以直接仿照 [weatherdemo.go](/Users/admin/ai_project/internal/demo/weatherdemo/weatherdemo.go) 里的天气节点模板，复制节点结构去改自己的业务逻辑。
+你可以直接仿照 [weatherdemo.go](/Users/admin/ai_project/examples/weatherdemo/weatherdemo.go) 里的天气节点模板，复制节点结构去改自己的业务逻辑。
 
 ### Step 3：让调度器能发现你的节点
 

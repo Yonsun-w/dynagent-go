@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,31 +25,33 @@ import (
 const terminateNode = "__terminate__"
 
 type Engine struct {
-	cfg        config.ExecutionConfig
-	logger     *zap.Logger
-	metrics    *observe.Observability
-	registry   *node.Registry
-	sandbox    *sandbox.Executor
-	aiGateway  *ai.Gateway
-	rules      *rules.Evaluator
-	memory     *memory.Engine
-	store      persistence.Store
-	summaryGen *summary.Generator
+	cfg             config.ExecutionConfig
+	routingMode     string
+	logger          *zap.Logger
+	metrics         *observe.Observability
+	registry        *node.Registry
+	sandbox         *sandbox.Executor
+	aiGateway       *ai.Gateway
+	rules           *rules.Evaluator
+	memory          *memory.Engine
+	store           persistence.Store
+	summaryGen      *summary.Generator
 	sensitiveFields []string
 }
 
-func New(cfg config.ExecutionConfig, logger *zap.Logger, metrics *observe.Observability, registry *node.Registry, sandboxExecutor *sandbox.Executor, aiGateway *ai.Gateway, rulesEval *rules.Evaluator, memoryEngine *memory.Engine, store persistence.Store, summaryGen *summary.Generator, sensitiveFields []string) *Engine {
+func New(cfg config.ExecutionConfig, routingMode string, logger *zap.Logger, metrics *observe.Observability, registry *node.Registry, sandboxExecutor *sandbox.Executor, aiGateway *ai.Gateway, rulesEval *rules.Evaluator, memoryEngine *memory.Engine, store persistence.Store, summaryGen *summary.Generator, sensitiveFields []string) *Engine {
 	return &Engine{
-		cfg:        cfg,
-		logger:     logger,
-		metrics:    metrics,
-		registry:   registry,
-		sandbox:    sandboxExecutor,
-		aiGateway:  aiGateway,
-		rules:      rulesEval,
-		memory:     memoryEngine,
-		store:      store,
-		summaryGen: summaryGen,
+		cfg:             cfg,
+		routingMode:     routingMode,
+		logger:          logger,
+		metrics:         metrics,
+		registry:        registry,
+		sandbox:         sandboxExecutor,
+		aiGateway:       aiGateway,
+		rules:           rulesEval,
+		memory:          memoryEngine,
+		store:           store,
+		summaryGen:      summaryGen,
 		sensitiveFields: sensitiveFields,
 	}
 }
@@ -82,13 +85,15 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 			return nil, err
 		}
 		decision, err := e.aiGateway.Decide(runCtx, ai.Request{
-			Prompt:           buildPrompt(st, recommended),
-			State:            readonly,
-			RecommendedNodes: recommended,
-			OutputSchema: map[string]any{
-				"next_node": "string",
-				"reasoning": "string",
-				"data":      "object",
+			Context: ai.RoutingContext{
+				TaskID:              st.Task.ID,
+				UserInput:           st.UserInput.Text,
+				Keywords:            st.UserInput.Keywords,
+				State:               readonly,
+				CandidateNodes:      buildCandidateNodes(e.registry.List()),
+				RecommendedNodes:    recommended,
+				LastRejectionReason: fmt.Sprint(st.Ext["last_rejection_reason"]),
+				PlanningEnabled:     e.routingMode == "route_and_plan",
 			},
 		})
 		if err != nil {
@@ -96,26 +101,66 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 			e.metrics.TaskFailures.Inc()
 			return nil, fmt.Errorf("ai decide step %d: %w", step, err)
 		}
+
+		switch decision.Type {
+		case ai.DecisionTypePlan:
+			if decision.Plan == nil {
+				return nil, errors.New("planning decision must include a plan payload")
+			}
+			st.Ext["latest_plan"] = map[string]any{
+				"goal":      decision.Plan.Goal,
+				"nodes":     decision.Plan.Nodes,
+				"edges":     decision.Plan.Edges,
+				"reasoning": decision.Plan.Reasoning,
+				"data":      decision.Plan.Data,
+			}
+			st.AppendDecision(state.DecisionRecord{
+				DecisionType: string(ai.DecisionTypePlan),
+				FunctionName: decision.FunctionCall.Name,
+				FunctionArgs: decision.FunctionCall.Arguments,
+				Step:         step,
+				Reasoning:    decision.Plan.Reasoning,
+				Data: map[string]any{
+					"goal":  decision.Plan.Goal,
+					"nodes": decision.Plan.Nodes,
+					"edges": decision.Plan.Edges,
+					"data":  decision.Plan.Data,
+				},
+				At: time.Now().UTC(),
+			})
+			continue
+		case ai.DecisionTypeRoute:
+		default:
+			return nil, fmt.Errorf("unsupported decision type %q", decision.Type)
+		}
+
+		if decision.Route == nil {
+			return nil, errors.New("route decision must include a route payload")
+		}
+
 		st.AppendDecision(state.DecisionRecord{
-			Step:      step,
-			NextNode:  decision.NextNode,
-			Reasoning: decision.Reasoning,
-			Data:      decision.Data,
-			At:        time.Now().UTC(),
+			DecisionType: string(ai.DecisionTypeRoute),
+			FunctionName: decision.FunctionCall.Name,
+			FunctionArgs: decision.FunctionCall.Arguments,
+			Step:         step,
+			NextNode:     decision.Route.NextNode,
+			Reasoning:    decision.Route.Reasoning,
+			Data:         decision.Route.Data,
+			At:           time.Now().UTC(),
 		})
-		if decision.NextNode == terminateNode {
+		if decision.Route.NextNode == terminateNode {
 			completedByTerminate = true
 			break
 		}
-		visited[decision.NextNode]++
-		if visited[decision.NextNode] > e.cfg.MaxSameNodeVisits {
+		visited[decision.Route.NextNode]++
+		if visited[decision.Route.NextNode] > e.cfg.MaxSameNodeVisits {
 			terminationReason = "loop_detected"
 			break
 		}
 
-		entry, ok := e.registry.Get(decision.NextNode)
+		entry, ok := e.registry.Get(decision.Route.NextNode)
 		if !ok {
-			return nil, fmt.Errorf("unknown node %q", decision.NextNode)
+			return nil, fmt.Errorf("unknown node %q", decision.Route.NextNode)
 		}
 
 		if entry.Rules != nil {
@@ -136,16 +181,16 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 		result, err := e.sandbox.Execute(runCtx, entry.Node, readonly)
 		finishedAt := time.Now().UTC()
 		durationSeconds := finishedAt.Sub(startedAt).Seconds()
-		e.metrics.NodeLatency.WithLabelValues(decision.NextNode).Observe(durationSeconds)
+		e.metrics.NodeLatency.WithLabelValues(decision.Route.NextNode).Observe(durationSeconds)
 		if err != nil || !result.Success {
-			e.metrics.NodeOutcome.WithLabelValues(decision.NextNode, "failed").Inc()
-			return nil, fmt.Errorf("execute node %s: %w", decision.NextNode, firstNonNil(err, result.Error))
+			e.metrics.NodeOutcome.WithLabelValues(decision.Route.NextNode, "failed").Inc()
+			return nil, fmt.Errorf("execute node %s: %w", decision.Route.NextNode, firstNonNil(err, result.Error))
 		}
-		e.metrics.NodeOutcome.WithLabelValues(decision.NextNode, "success").Inc()
+		e.metrics.NodeOutcome.WithLabelValues(decision.Route.NextNode, "success").Inc()
 
-		snapshot, err := st.ApplyPatch(decision.NextNode, result.Patch, e.sensitiveFields)
+		snapshot, err := st.ApplyPatch(decision.Route.NextNode, result.Patch, e.sensitiveFields)
 		if err != nil {
-			return nil, fmt.Errorf("apply patch for node %s: %w", decision.NextNode, err)
+			return nil, fmt.Errorf("apply patch for node %s: %w", decision.Route.NextNode, err)
 		}
 		if err := e.store.UpdateTask(runCtx, *st); err != nil {
 			return nil, err
@@ -156,9 +201,9 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 		readonlyInput, _ := readonly.ToMap()
 		if err := e.store.SaveStep(runCtx, st.Task.ID, persistence.StepRecord{
 			StepIndex:  step,
-			NodeID:     decision.NextNode,
+			NodeID:     decision.Route.NextNode,
 			Status:     "success",
-			Reasoning:  decision.Reasoning,
+			Reasoning:  decision.Route.Reasoning,
 			StartedAt:  startedAt,
 			FinishedAt: finishedAt,
 			Input:      readonlyInput,
@@ -166,7 +211,7 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 		}); err != nil {
 			return nil, err
 		}
-		if err := e.memory.RecordStep(runCtx, st, decision.NextNode); err != nil {
+		if err := e.memory.RecordStep(runCtx, st, decision.Route.NextNode); err != nil {
 			e.logger.Warn("record step memory failed", zap.Error(err))
 		}
 	}
@@ -204,13 +249,24 @@ func (e *Engine) Run(ctx context.Context, st *state.State) (map[string]any, erro
 	return summaryPayload, nil
 }
 
-func buildPrompt(st *state.State, recommended []string) string {
-	return fmt.Sprintf("Task=%s; UserInput=%s; RecommendedNodes=%v; LastRejection=%v", st.Task.ID, st.UserInput.Text, recommended, st.Ext["last_rejection_reason"])
-}
-
 func firstNonNil(err error, fallback string) error {
 	if err != nil {
 		return err
 	}
 	return errors.New(fallback)
+}
+
+func buildCandidateNodes(metas []node.Meta) []ai.CandidateNode {
+	sort.Slice(metas, func(i, j int) bool {
+		return metas[i].ID < metas[j].ID
+	})
+	out := make([]ai.CandidateNode, 0, len(metas))
+	for _, meta := range metas {
+		out = append(out, ai.CandidateNode{
+			ID:          meta.ID,
+			Description: meta.Description,
+			Labels:      append([]string(nil), meta.Labels...),
+		})
+	}
+	return out
 }

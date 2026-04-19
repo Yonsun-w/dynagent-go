@@ -34,12 +34,12 @@ type ServerConfig struct {
 }
 
 type ExecutionConfig struct {
-	MaxSteps         int           `yaml:"max_steps"`
-	TaskTimeout      time.Duration `yaml:"task_timeout"`
-	NodeTimeout      time.Duration `yaml:"node_timeout"`
-	MaxParallelNodes int           `yaml:"max_parallel_nodes"`
-	LoopWindow       int           `yaml:"loop_window"`
-	MaxSameNodeVisits int          `yaml:"max_same_node_visits"`
+	MaxSteps          int           `yaml:"max_steps"`
+	TaskTimeout       time.Duration `yaml:"task_timeout"`
+	NodeTimeout       time.Duration `yaml:"node_timeout"`
+	MaxParallelNodes  int           `yaml:"max_parallel_nodes"`
+	LoopWindow        int           `yaml:"loop_window"`
+	MaxSameNodeVisits int           `yaml:"max_same_node_visits"`
 }
 
 type ModelConfig struct {
@@ -70,25 +70,26 @@ type CircuitBreakerConfig struct {
 type AIConfig struct {
 	Primary        ModelConfig          `yaml:"primary"`
 	Fallback       ModelConfig          `yaml:"fallback"`
+	RoutingMode    string               `yaml:"routing_mode"`
 	Retry          RetryConfig          `yaml:"retry"`
 	RateLimit      RateLimitConfig      `yaml:"rate_limit"`
 	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
 }
 
 type StorageConfig struct {
-	Backend      string `yaml:"backend"`
-	PostgresDSN  string `yaml:"postgres_dsn"`
-	RedisAddr    string `yaml:"redis_addr"`
+	Backend       string `yaml:"backend"`
+	PostgresDSN   string `yaml:"postgres_dsn"`
+	RedisAddr     string `yaml:"redis_addr"`
 	RedisPassword string `yaml:"redis_password"`
-	RedisDB      int    `yaml:"redis_db"`
-	ColdDataDir  string `yaml:"cold_data_dir"`
+	RedisDB       int    `yaml:"redis_db"`
+	ColdDataDir   string `yaml:"cold_data_dir"`
 }
 
 type ObservabilityConfig struct {
-	LogLevel    string `yaml:"log_level"`
-	MetricsPath string `yaml:"metrics_path"`
+	LogLevel     string `yaml:"log_level"`
+	MetricsPath  string `yaml:"metrics_path"`
 	OTLPEndpoint string `yaml:"otlp_endpoint"`
-	EnablePprof bool   `yaml:"enable_pprof"`
+	EnablePprof  bool   `yaml:"enable_pprof"`
 }
 
 type SecurityConfig struct {
@@ -183,18 +184,21 @@ func (c *Config) ApplyDefaultsAndValidate() error {
 		c.Nodes.GRPCDialTimeout = 3 * time.Second
 	}
 	if c.AI.Primary.Provider == "" {
-		c.AI.Primary.Provider = "mock"
-		c.AI.Primary.Model = "mock-router"
+		c.AI.Primary.Provider = "mock_function"
+		c.AI.Primary.Model = "mock-function-router"
 	}
 	if c.AI.Primary.Timeout <= 0 {
 		c.AI.Primary.Timeout = 5 * time.Second
 	}
 	if c.AI.Fallback.Provider == "" {
-		c.AI.Fallback.Provider = "mock"
-		c.AI.Fallback.Model = "mock-fallback"
+		c.AI.Fallback.Provider = "mock_function"
+		c.AI.Fallback.Model = "mock-function-fallback"
 	}
 	if c.AI.Fallback.Timeout <= 0 {
 		c.AI.Fallback.Timeout = 5 * time.Second
+	}
+	if c.AI.RoutingMode == "" {
+		c.AI.RoutingMode = "route_only"
 	}
 	if c.AI.Retry.MaxAttempts <= 0 {
 		c.AI.Retry.MaxAttempts = 2
@@ -233,5 +237,35 @@ func (c *Config) ApplyDefaultsAndValidate() error {
 	if c.Server.Address == "" {
 		return errors.New("server.address must not be empty")
 	}
+	if err := validateAIConfig(c.AI); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateAIConfig(cfg AIConfig) error {
+	if !slicesContains([]string{"route_only", "route_and_plan"}, cfg.RoutingMode) {
+		return fmt.Errorf("ai.routing_mode must be route_only or route_and_plan, got %q", cfg.RoutingMode)
+	}
+	for _, provider := range []string{cfg.Primary.Provider, cfg.Fallback.Provider} {
+		if provider == "" {
+			return errors.New("ai provider must not be empty")
+		}
+		if provider == "mock" || provider == "compatible" {
+			return fmt.Errorf("legacy ai provider %q is no longer supported; use function-calling providers only", provider)
+		}
+		if !slicesContains([]string{"mock_function", "openai", "openai_compatible", "anthropic"}, provider) {
+			return fmt.Errorf("unsupported ai provider %q", provider)
+		}
+	}
+	return nil
+}
+
+func slicesContains(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

@@ -35,14 +35,14 @@ CurrentState + CandidateNodes + AdmissionPolicy + AIRouter -> NextStep
 
 ### AI Gateway 🤖
 
-统一所有模型输出到：
+DynAgent 的决策协议是 Function Calling-only：
 
-```json
-{
-  "next_node": "string",
-  "reasoning": "string",
-  "data": {}
-}
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
 ```
 
 内建能力：
@@ -88,6 +88,29 @@ CurrentState + CandidateNodes + AdmissionPolicy + AIRouter -> NextStep
 decide -> validate -> admit -> sandbox execute -> validate patch -> merge -> persist -> repeat
 ```
 
+如果需要“先规划 DAG 再执行”，可以额外启用：
+
+```text
+propose_dag(
+  goal: string,
+  nodes: string[],
+  edges: {from,to}[],
+  reasoning: string,
+  data: object
+)
+```
+
+规划结果只进入状态/摘要/记忆层；真正执行依然保持单步路由。
+
+## 🆚 设计差异
+
+| 维度 | DynAgent | Claude Code | LangGraph |
+| --- | --- | --- | --- |
+| 核心范式 | 受约束的动态 Agent Runtime | 面向编码任务的 Agentic IDE / CLI 助手 | 显式图编排框架 |
+| 拓扑假设 | 无预设边 | 动态任务流，不强调通用节点图 | 以图结构为第一公民 |
+| 状态所有权 | 调度器拥有主 State | 会话 / 工作区上下文为中心 | 图执行器负责状态流转 |
+| 目标问题 | 通用执行内核 | 编码生产力 | 图式 Agent 工作流 |
+
 ### Memory Engine 🧠
 
 存储：
@@ -104,34 +127,7 @@ decide -> validate -> admit -> sandbox execute -> validate patch -> merge -> per
 
 ## 🗺️ 时序图
 
-```mermaid
-sequenceDiagram
-    participant Client as 调用方
-    participant API as API
-    participant Engine as Engine
-    participant Memory as Memory
-    participant AI as AI
-    participant Rules as Rules
-    participant Sandbox as Sandbox
-    participant Node as Node
-    participant Store as Store
-
-    Client->>API: 提交任务
-    API->>Engine: Run(task)
-    Engine->>Memory: 召回候选节点
-    Memory-->>Engine: 候选节点集
-    Engine->>AI: 决策 next_node
-    AI-->>Engine: 标准化 decision
-    Engine->>Rules: 执行准入校验
-    Rules-->>Engine: allow / reject
-    Engine->>Sandbox: 执行节点
-    Sandbox->>Node: 传入 readonly state
-    Node-->>Sandbox: patch + output
-    Sandbox-->>Engine: result
-    Engine->>Store: 保存 step / snapshot / lineage
-    Engine-->>API: 返回结构化摘要
-    API-->>Client: 响应
-```
+![DynAgent 时序视图](./assets/sequence-view-modern-zh.svg)
 
 ## ⚡ 常用命令
 
@@ -141,13 +137,15 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
 CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
 
-## 🧷 Demo 内置节点
+## 🧷 Framework Demo
 
-- `intent_parse`
-- `text_transform`
-- `generic_http_call`
-- `finalize`
-- `external_echo`
+当前默认 demo 是一个**基于框架真实装配**的天气 Agent：
+
+- `resolve_user_location`
+- `query_weather`
+- `finalize_weather_answer`
+- `route_next_node(...)`
+- `propose_dag(...)`
 
 ## 📎 说明
 

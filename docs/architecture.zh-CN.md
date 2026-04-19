@@ -36,7 +36,7 @@ DynAgent 的目标，就是把这些职责拆成明确的运行时平面。
 ### AI 网关 🤖
 
 - 屏蔽不同模型厂商差异
-- 统一输出格式
+- 统一成固定 Function Calling 路由协议
 - 承担重试、限流、熔断、主备切换
 
 ### 节点注册中心 🔌
@@ -108,18 +108,46 @@ State
 
 ## 5. 执行语义 🔁
 
-![DynAgent 运行时控制环](./assets/runtime-flow-modern.svg)
+![DynAgent 运行时控制环](./assets/runtime-flow-modern-zh.svg)
 
 ## 5.1 AI 决策与数据流转 🧬
 
-![DynAgent AI 决策与数据流](./assets/ai-decision-modern.svg)
+![DynAgent AI 决策与数据流](./assets/ai-decision-modern-zh.svg)
 
+推荐的路由协议不是“让模型吐一段 JSON 文本”，而是固定函数调用：
+
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
+```
+
+- `next_node` 指向节点 ID 或 `__terminate__`
+- `reasoning` 记录路由理由，便于回放和排障
+- `data` 承载结构化路由参数
+
+如果你要支持“规划 DAG 再执行”，建议显式启用：
+
+```text
+propose_dag(
+  goal: string,
+  nodes: string[],
+  edges: {from,to}[],
+  reasoning: string,
+  data: object
+)
+```
+
+`propose_dag(...)` 只记录规划；  
+调度器仍然只消费**当前这一步**的可执行决策，而不是把 DAG 直接当成固定拓扑。
 
 每一轮调度在运行时层面是严格固定的：
 
 1. 读取当前 State
 2. 从记忆引擎召回候选节点
-3. 让 AI 选择下一跳
+3. 让 AI 发起函数调用
 4. 校验节点存在性
 5. 校验准入规则
 6. 在沙箱中执行节点
@@ -128,6 +156,16 @@ State
 9. 持久化 step、snapshot、lineage、summary 上下文
 
 不确定性只来自 AI 决策；运行时本身保持强约束。
+
+## 5.2 设计理念差异 🆚
+
+| 维度 | DynAgent | Claude Code | LangGraph |
+| --- | --- | --- | --- |
+| 核心抽象 | 动态运行时内核 | 编码助手 / Agentic IDE | 图编排框架 |
+| 运行控制权 | Runtime 掌控准入、状态合并、回放 | 围绕编码任务的模型协作 | 开发者定义图与边 |
+| 拓扑前提 | 无预设边 | 任务驱动，不强调通用运行时图 | 需要显式图结构 |
+| 状态模型 | 调度器独占主 State | 会话与工作区上下文 | Graph state 逐节点传递 |
+| 适用目标 | 通用动态 Agent 底座 | 写码、改码、分析代码 | 构建可控的图工作流 |
 
 ## 6. 热加载模型 🔥
 

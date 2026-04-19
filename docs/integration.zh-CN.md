@@ -20,7 +20,7 @@ DynAgent 当前已经是一个**可运行的动态 Agent 执行内核**，但它
 ### 当前已经具备的能力
 
 - 接收一条任务输入并执行完整动态链路
-- 由 AI 决定下一跳节点
+- 由 AI 通过 function calling 决定下一跳节点
 - 调度器校验节点存在性、准入规则、超时、循环和最大步数
 - 节点只能读取 `ReadOnlyState`，不能直接改全局状态
 - 节点结果通过 `Patch` 由调度器统一合并
@@ -30,18 +30,20 @@ DynAgent 当前已经是一个**可运行的动态 Agent 执行内核**，但它
 
 ### 当前默认 demo 会做什么
 
-如果你直接运行 demo，现在默认执行路径是：
+如果你直接运行 demo，现在跑的是一个**基于框架真实装配**的天气 Agent，默认链路是：
 
-1. `intent_parse`
-2. `text_transform`
-3. `finalize`
-4. `__terminate__`
+1. `propose_dag(...)`
+2. `route_next_node(resolve_user_location)`
+3. `route_next_node(query_weather)`
+4. `route_next_node(finalize_weather_answer)`
+5. `route_next_node(__terminate__)`
 
 也就是说，当前仓库默认是“框架演示模式”，方便你确认：
 
-- 动态调度能跑通
+- function calling 路由能跑通
 - 状态合并能跑通
 - 摘要与轨迹能跑通
+- 规划记录与路由记录都能回放
 
 但它**不是**已经内置大量真实业务节点的最终产品。
 
@@ -58,7 +60,7 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
 这条命令会：
 
 - 初始化框架
-- 注册内置节点
+- 注册天气场景节点
 - 构造一个 demo 任务
 - 跑完整条执行链
 - 输出结构化摘要
@@ -155,8 +157,9 @@ DynAgent 跑动态节点链
 
 当前默认配置里：
 
-- `ai.primary.provider: mock`
-- `ai.fallback.provider: mock`
+- `ai.primary.provider: mock_function`
+- `ai.fallback.provider: mock_function`
+- `ai.routing_mode: route_and_plan`
 
 配置文件在 [config.yaml](/Users/admin/ai_project/configs/config.yaml)。
 
@@ -178,12 +181,45 @@ AI 网关实现位置在：
 
 当前已经有这些 provider 通道：
 
-- `mock`
+- `mock_function`
 - `openai`
-- `compatible`
+- `openai_compatible`
 - `anthropic`
 
-如果你的模型网关是 OpenAI 兼容协议，最简单的方式通常是走 `compatible`。
+如果你的模型网关是 OpenAI 兼容协议，最简单的方式通常是走 `openai_compatible`。
+
+#### 推荐的路由接法：固定 Function Calling
+
+DynAgent 更推荐你把路由协议固定成一个函数，而不是让模型自由生成一段 JSON：
+
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
+```
+
+推荐原因很直接：
+
+- 对模型约束更强，路由稳定性更高
+- 更容易做 provider 兼容适配
+- 更容易做日志采集、回放和错误排查
+
+如果你真的需要“先规划 DAG”，建议显式启用第二个函数：
+
+```text
+propose_dag(
+  goal: string,
+  nodes: string[],
+  edges: {from,to}[],
+  reasoning: string,
+  data: object
+)
+```
+
+`propose_dag(...)` 只记录规划，不直接执行；  
+真正执行时，调度器仍然只接收当前一步的 `route_next_node(...)` 结果。
 
 ### Step 2：把业务能力写成节点
 
@@ -324,8 +360,8 @@ orderExtractNode{},
 
 有两种方式：
 
-- 真实模型：通过 prompt / 节点描述 / 状态上下文让模型学会选它
-- 当前 demo：你可以临时修改 mock provider 的分支逻辑
+- 真实模型：通过函数 schema + 节点描述 + 状态上下文，让模型在 `route_next_node(...)` 中选择它
+- 当前 demo：你可以扩展 `mock_function` provider 的函数调用策略
 
 ---
 
@@ -420,21 +456,20 @@ timeout: 5s
 
 ### 8.1 接真实模型
 
-这是第一优先级，否则当前只能跑 mock demo。
+这是第一优先级，否则当前只能跑 mock function-calling demo。
 
 ### 8.2 增加业务节点
 
 当前内置节点更多是演示用途，不足以支撑真实业务链。
 
-### 8.3 改进 AI prompt
+### 8.3 改进 Routing Context
 
-当前 `buildPrompt()` 还是非常轻量的 demo 形态。  
-真实业务里，你应该：
+真实业务里，你应该重点增强的是**结构化路由上下文**，而不是自由文本 prompt：
 
-- 明确任务目标
 - 明确候选节点说明
-- 明确拒绝原因回灌
-- 明确输出 schema
+- 明确最近一次拒绝原因
+- 明确规划能力是否开启
+- 明确 function schema 约束
 
 ### 8.4 把存储切到 Postgres + Redis
 
@@ -462,7 +497,7 @@ timeout: 5s
 1. 配置 `ai.primary`
 2. 接通模型网关
 3. 保持内置 demo 节点不变
-4. 验证真实模型能正确路由
+4. 验证真实模型能通过 `route_next_node(...)` 正确路由
 
 ### Phase 3：加你的第一个业务节点
 
@@ -500,7 +535,6 @@ timeout: 5s
 
 ### 现在仍然偏“框架初版”的部分
 
-- prompt 设计还比较简化
 - 内置节点数量少
 - 向量记忆还没有完整后端闭环
 - 真实 provider 侧的适配还需要按你的模型网关再细化

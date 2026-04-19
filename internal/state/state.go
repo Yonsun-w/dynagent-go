@@ -38,23 +38,26 @@ type Trace struct {
 }
 
 type DecisionRecord struct {
-	Step      int               `json:"step"`
-	NextNode  string            `json:"next_node"`
-	Reasoning string            `json:"reasoning"`
-	Data      map[string]any    `json:"data"`
-	At        time.Time         `json:"at"`
+	DecisionType string         `json:"decision_type"`
+	FunctionName string         `json:"function_name"`
+	FunctionArgs map[string]any `json:"function_args,omitempty"`
+	Step         int            `json:"step"`
+	NextNode     string         `json:"next_node"`
+	Reasoning    string         `json:"reasoning"`
+	Data         map[string]any `json:"data"`
+	At           time.Time      `json:"at"`
 }
 
 type State struct {
-	Version       int64                        `json:"version"`
-	Task          TaskMeta                     `json:"task"`
-	UserInput     UserInput                    `json:"user_input"`
-	WorkingMemory map[string]any               `json:"working_memory"`
-	NodeOutputs   map[string]map[string]any    `json:"node_outputs"`
-	DecisionLog   []DecisionRecord             `json:"decision_log"`
-	Trace         Trace                        `json:"trace"`
-	Sensitive     map[string]string            `json:"sensitive"`
-	Ext           map[string]any               `json:"ext"`
+	Version       int64                     `json:"version"`
+	Task          TaskMeta                  `json:"task"`
+	UserInput     UserInput                 `json:"user_input"`
+	WorkingMemory map[string]any            `json:"working_memory"`
+	NodeOutputs   map[string]map[string]any `json:"node_outputs"`
+	DecisionLog   []DecisionRecord          `json:"decision_log"`
+	Trace         Trace                     `json:"trace"`
+	Sensitive     map[string]string         `json:"sensitive"`
+	Ext           map[string]any            `json:"ext"`
 }
 
 type Patch struct {

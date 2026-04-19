@@ -55,15 +55,21 @@ Responsibilities:
 - circuit breaker
 - fallback model routing
 
-Decision contract:
+Recommended decision contract:
 
-```json
-{
-  "next_node": "string",
-  "reasoning": "string",
-  "data": {}
-}
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
 ```
+
+Notes:
+
+- this is a function-calling-only protocol, not a free-form decision channel
+- it aligns naturally with OpenAI-compatible and Anthropic-style tool/function calling
+- the runtime consumes strong typed function calls internally
 
 ### 4.2 Node Plane
 
@@ -119,7 +125,7 @@ Persistence is split by access pattern:
 ```mermaid
 flowchart TD
     A[Load State] --> B[Recall Candidate Nodes]
-    B --> C[AI Decide next_node]
+    B --> C[AI Call route_next_node]
     C --> D{Node Exists?}
     D -- No --> C
     D -- Yes --> E{Admission Rules Pass?}

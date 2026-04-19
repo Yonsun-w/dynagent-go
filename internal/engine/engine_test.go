@@ -56,6 +56,7 @@ func TestEngineRunCompletesWithBuiltins(t *testing.T) {
 			LoopWindow:        3,
 			MaxSameNodeVisits: 2,
 		},
+		cfg.AI.RoutingMode,
 		obs.Logger,
 		obs,
 		registry,

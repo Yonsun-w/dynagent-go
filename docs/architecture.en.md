@@ -36,7 +36,7 @@ DynAgent decomposes those concerns into explicit runtime planes.
 ### AI Gateway 🤖
 
 - abstracts vendor differences
-- normalizes model output
+- normalizes routing through a fixed Function Calling contract
 - applies retry, rate limiting, and circuit breaking
 - supports primary/fallback model routing
 
@@ -111,11 +111,40 @@ This avoids direct pointer mutation by node code.
 
 ![DynAgent runtime control loop](./assets/runtime-flow-modern.svg)
 
+Recommended routing is not “free-form text that happens to contain JSON”, but a fixed function call:
+
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
+```
+
+- `next_node` points to a node id or `__terminate__`
+- `reasoning` is persisted for replay and debugging
+- `data` carries structured routing metadata
+
+If a product wants planning-first execution, it should explicitly enable:
+
+```text
+propose_dag(
+  goal: string,
+  nodes: string[],
+  edges: {from,to}[],
+  reasoning: string,
+  data: object
+)
+```
+
+`propose_dag(...)` records a plan only.  
+The runtime still consumes one validated hop at a time instead of turning the plan into a fixed graph.
+
 Each loop iteration is deterministic at the runtime level:
 
 1. take the current State
 2. ask memory for candidate nodes
-3. ask AI for next hop
+3. ask AI for a function call
 4. validate node existence
 5. validate admission rules
 6. execute node inside sandbox
@@ -124,6 +153,16 @@ Each loop iteration is deterministic at the runtime level:
 9. persist lineage, snapshot, and summary context
 
 The non-deterministic part is the AI decision. Everything around it is intentionally strict.
+
+## 5.1 Design Delta 🆚
+
+| Dimension | DynAgent | Claude Code | LangGraph |
+| --- | --- | --- | --- |
+| Core abstraction | dynamic runtime kernel | coding assistant / agentic IDE | graph orchestration framework |
+| Runtime control | runtime owns admission, state merge, and replay | model-centric coding collaboration | developer-defined graphs and edges |
+| Topology premise | no predefined edges | task-driven, not a general graph runtime | explicit graph structure required |
+| State model | scheduler-owned master state | session / workspace context | graph state propagated by executor |
+| Best fit | general dynamic Agent substrate | coding workflows | controllable graph workflows |
 
 ## 6. Hot-Load Model 🔥
 

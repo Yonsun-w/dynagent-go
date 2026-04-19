@@ -19,13 +19,8 @@ func (g *Generator) Build(ctx context.Context, st *state.State, record persisten
 	for _, step := range record.Steps {
 		sequence = append(sequence, step.NodeID)
 	}
-	finalConclusion := ""
-	if output, ok := st.NodeOutputs["finalize"]; ok {
-		if value, ok := output["final_text"].(string); ok {
-			finalConclusion = value
-		}
-	}
-	return map[string]any{
+	finalConclusion := extractFinalConclusion(st)
+	payload := map[string]any{
 		"task_id":            st.Task.ID,
 		"status":             st.Task.Status,
 		"keywords":           st.UserInput.Keywords,
@@ -35,4 +30,20 @@ func (g *Generator) Build(ctx context.Context, st *state.State, record persisten
 		"reasoning_log":      st.DecisionLog,
 		"key_results":        st.NodeOutputs,
 	}
+	if plan, ok := st.Ext["latest_plan"]; ok {
+		payload["latest_plan"] = plan
+	}
+	return payload
+}
+
+func extractFinalConclusion(st *state.State) string {
+	if value, ok := st.WorkingMemory["final_text"].(string); ok && value != "" {
+		return value
+	}
+	for _, output := range st.NodeOutputs {
+		if value, ok := output["final_text"].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
 }

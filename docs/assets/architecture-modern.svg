@@ -66,7 +66,7 @@
   <path d="M795 257h16M803 249v16" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <text x="850" y="258" class="card">AI Gateway</text>
   <text x="850" y="286" class="meta">retry / fallback / normalize</text>
-  <text x="778" y="322" class="code">{next_node, reasoning, data}</text>
+  <text x="778" y="322" class="code">route_next_node(...)</text>
 
   <rect x="432" y="396" width="288" height="150" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="458" y="422" width="50" height="50" rx="16" fill="url(#accent3)"/>
@@ -99,18 +99,18 @@
   <text x="850" y="666" class="meta">trajectory recall</text>
   <text x="778" y="704" class="code">node hints</text>
 
-  <rect x="1110" y="206" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
+  <rect x="1110" y="206" width="206" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1136" y="232" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M1150 249l18 18M1168 249l-18 18" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <text x="1206" y="258" class="card">Builtin</text>
   <text x="1136" y="320" class="code">intent_parse</text>
   <text x="1136" y="342" class="code">finalize</text>
 
-  <rect x="1330" y="206" width="186" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
+  <rect x="1320" y="206" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1356" y="232" width="50" height="50" rx="16" fill="url(#accent2)"/>
   <path d="M1370 249h22v22h-22z" stroke="#0F172A" stroke-width="3.2"/>
-  <text x="1426" y="258" class="card">Ext</text>
-  <text x="1426" y="286" class="meta">manifest + gRPC</text>
+  <text x="1392" y="258" class="card">External Nodes</text>
+  <text x="1392" y="286" class="meta">manifest · gRPC</text>
 
   <rect x="1110" y="436" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1136" y="462" width="50" height="50" rx="16" fill="url(#accent3)"/>
@@ -118,7 +118,7 @@
   <text x="1206" y="488" class="card">Postgres</text>
   <text x="1206" y="516" class="meta">tasks / steps / snapshots</text>
 
-  <rect x="1330" y="436" width="186" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
+  <rect x="1320" y="436" width="196" height="170" rx="28" fill="url(#panel)" stroke="#2B4269" filter="url(#shadow)"/>
   <rect x="1356" y="462" width="50" height="50" rx="16" fill="url(#accent1)"/>
   <path d="M1369 486h24" stroke="#0F172A" stroke-width="3.2" stroke-linecap="round"/>
   <path d="M1374 474h14v24h-14z" stroke="#0F172A" stroke-width="3.2"/>

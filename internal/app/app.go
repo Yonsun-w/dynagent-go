@@ -51,6 +51,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 	engineInstance := engine.New(
 		cfg.Execution,
+		cfg.AI.RoutingMode,
 		obs.Logger,
 		obs,
 		registry,

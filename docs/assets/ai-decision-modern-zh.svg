@@ -20,21 +20,21 @@
       <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#020617" flood-opacity="0.34"/>
     </filter>
     <style>
-      .title { font: 700 32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F8FAFC; }
-      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #94A3B8; }
-      .card { font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F8FAFC; }
-      .meta { font: 500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #94A3B8; }
+      .title { font: 700 32px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #F8FAFC; }
+      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #94A3B8; }
+      .card { font: 700 20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #F8FAFC; }
+      .meta { font: 500 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #94A3B8; }
       .code { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #BFDBFE; }
     </style>
   </defs>
 
   <rect width="1600" height="680" rx="32" fill="url(#bg)"/>
-  <text x="72" y="82" class="title">AI Decision Flow</text>
-  <text x="72" y="112" class="sub">What the model sees, what it returns, and what the runtime accepts.</text>
+  <text x="72" y="82" class="title">AI 决策流</text>
+  <text x="72" y="112" class="sub">模型看见什么，返回什么，运行时接受什么。</text>
 
   <rect x="96" y="184" width="404" height="208" rx="28" fill="url(#card)" stroke="#27416A" filter="url(#shadow)"/>
   <rect x="126" y="214" width="52" height="52" rx="16" fill="url(#acc1)"/>
-  <text x="198" y="244" class="card">Routing Context</text>
+  <text x="198" y="244" class="card">路由上下文</text>
   <text x="126" y="300" class="code">task_id</text>
   <text x="126" y="326" class="code">user_input</text>
   <text x="126" y="352" class="code">state snapshot</text>
@@ -42,7 +42,7 @@
 
   <rect x="598" y="184" width="404" height="208" rx="28" fill="url(#card)" stroke="#27416A" filter="url(#shadow)"/>
   <rect x="628" y="214" width="52" height="52" rx="16" fill="url(#acc2)"/>
-  <text x="700" y="244" class="card">Function Route</text>
+  <text x="700" y="244" class="card">函数路由</text>
   <text x="628" y="300" class="code">route_next_node(</text>
   <text x="656" y="326" class="code">next_node="..."</text>
   <text x="656" y="352" class="code">reasoning="..."</text>
@@ -50,14 +50,14 @@
 
   <rect x="1100" y="184" width="404" height="208" rx="28" fill="url(#card)" stroke="#27416A" filter="url(#shadow)"/>
   <rect x="1130" y="214" width="52" height="52" rx="16" fill="url(#acc1)"/>
-  <text x="1202" y="244" class="card">Acceptance Gate</text>
-  <text x="1130" y="300" class="code">node exists?</text>
-  <text x="1130" y="326" class="code">rules pass?</text>
-  <text x="1130" y="352" class="code">loop / timeout pass?</text>
-  <text x="1130" y="378" class="code">then sandbox execute</text>
+  <text x="1202" y="244" class="card">运行时准入</text>
+  <text x="1130" y="300" class="code">节点存在?</text>
+  <text x="1130" y="326" class="code">规则通过?</text>
+  <text x="1130" y="352" class="code">步数 / 超时通过?</text>
+  <text x="1130" y="378" class="code">然后进入沙箱执行</text>
 
   <path d="M500 288H598M1002 288H1100" stroke="#60A5FA" stroke-width="4" stroke-linecap="round"/>
 
   <rect x="450" y="494" width="700" height="88" rx="24" fill="#101827" stroke="#27416A"/>
-  <text x="490" y="546" class="code">AI emits a fixed function call. Runtime decides whether that hop becomes executable.</text>
+  <text x="490" y="546" class="code">AI 发起固定函数调用；Runtime 决定这一步是否真的可执行。</text>
 </svg>

@@ -55,15 +55,21 @@ DynAgent 明确不打算做这些事情：
 - 熔断
 - 主备模型切换
 
-决策契约：
+推荐的决策契约：
 
-```json
-{
-  "next_node": "string",
-  "reasoning": "string",
-  "data": {}
-}
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
 ```
+
+说明：
+
+- 这是 function-calling-only 协议，不兼容自由文本决策
+- 也更适合接 OpenAI-compatible / Anthropic 类工具调用协议
+- 运行时最终只消费强类型函数调用结果
 
 ### 4.2 Node Plane
 
@@ -119,7 +125,7 @@ State
 ```mermaid
 flowchart TD
     A[读取当前 State] --> B[召回候选节点]
-    B --> C[AI 决策 next_node]
+    B --> C[AI 调用 route_next_node]
     C --> D{节点存在?}
     D -- 否 --> C
     D -- 是 --> E{准入规则通过?}

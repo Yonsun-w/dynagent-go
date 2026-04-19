@@ -17,16 +17,17 @@ execution:
   max_same_node_visits: 3
 
 ai:
+  routing_mode: route_and_plan
   primary:
-    provider: mock
+    provider: mock_function
     endpoint: ""
-    model: mock-router
+    model: mock-function-router
     api_key_env: ""
     timeout: 5s
   fallback:
-    provider: mock
+    provider: mock_function
     endpoint: ""
-    model: mock-fallback
+    model: mock-function-fallback
     api_key_env: ""
     timeout: 5s
   retry:

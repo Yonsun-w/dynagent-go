@@ -35,14 +35,14 @@ The runtime graph is materialized during execution, not precompiled in config.
 
 ### AI Gateway 🤖
 
-Normalizes all model outputs into:
+DynAgent uses a Function Calling-only decision contract:
 
-```json
-{
-  "next_node": "string",
-  "reasoning": "string",
-  "data": {}
-}
+```text
+route_next_node(
+  next_node: string,
+  reasoning: string,
+  data: object
+)
 ```
 
 Built-in concerns:
@@ -88,6 +88,29 @@ Main loop:
 decide -> validate -> admit -> sandbox execute -> validate patch -> merge -> persist -> repeat
 ```
 
+If a product needs planning-first execution, it can additionally enable:
+
+```text
+propose_dag(
+  goal: string,
+  nodes: string[],
+  edges: {from,to}[],
+  reasoning: string,
+  data: object
+)
+```
+
+The plan is recorded in state/summary/memory only. Actual execution remains hop-based.
+
+## 🆚 Design Delta
+
+| Dimension | DynAgent | Claude Code | LangGraph |
+| --- | --- | --- | --- |
+| Core model | constrained dynamic Agent runtime | agentic IDE / CLI for coding tasks | explicit graph orchestration framework |
+| Topology assumption | no predefined edges | dynamic task flow, not a general runtime graph kernel | graph structure is first-class |
+| State ownership | scheduler owns master state | session / workspace oriented context | graph executor propagates state |
+| Target problem | general execution kernel | coding productivity | graph-based Agent workflows |
+
 ### Memory Engine 🧠
 
 Stores:
@@ -104,34 +127,7 @@ Stores:
 
 ## 🗺️ Sequence View
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API
-    participant Engine
-    participant Memory
-    participant AI
-    participant Rules
-    participant Sandbox
-    participant Node
-    participant Store
-
-    Client->>API: submit task
-    API->>Engine: Run(task)
-    Engine->>Memory: recall candidates
-    Memory-->>Engine: node candidates
-    Engine->>AI: decide next_node
-    AI-->>Engine: normalized decision
-    Engine->>Rules: admission check
-    Rules-->>Engine: allow / reject
-    Engine->>Sandbox: execute node
-    Sandbox->>Node: readonly state
-    Node-->>Sandbox: patch + output
-    Sandbox-->>Engine: result
-    Engine->>Store: save step / snapshot / lineage
-    Engine-->>API: structured summary
-    API-->>Client: response
-```
+![DynAgent sequence view](./assets/sequence-view-modern.svg)
 
 ## ⚡ Commands
 
@@ -141,13 +137,15 @@ CGO_ENABLED=0 go run ./cmd/demo --config ./configs/config.yaml
 CGO_ENABLED=0 go run ./cmd/server --config ./configs/config.yaml
 ```
 
-## 🧷 Builtin Demo Nodes
+## 🧷 Framework Demo
 
-- `intent_parse`
-- `text_transform`
-- `generic_http_call`
-- `finalize`
-- `external_echo`
+The default demo is now a **framework-native weather agent**:
+
+- `resolve_user_location`
+- `query_weather`
+- `finalize_weather_answer`
+- `route_next_node(...)`
+- `propose_dag(...)`
 
 ## 📎 Notes
 
